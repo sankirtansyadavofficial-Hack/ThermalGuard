@@ -8,6 +8,8 @@ import {
   MapPin,
   ScanLine,
   ShieldCheck,
+  Zap,
+  Activity,
   X,
 } from "lucide-react";
 import { DISTRICTS } from "./districts";
@@ -129,6 +131,23 @@ export default function Landing({ onEnter, manager }) {
               <code>
                 {district.lat.toFixed(2)}° N / {district.lon.toFixed(2)}° E
               </code>
+              <div className="earth-coordinate-stats">
+                <span className="coord-badge">
+                  <Flame size={11} /> {district.detectedHotspots} Hotspots
+                </span>
+                <span className="coord-badge frp">
+                  <Zap size={11} /> {district.maxFrpMw} MW
+                </span>
+                <span
+                  className="coord-badge risk"
+                  style={{
+                    color: district.riskColor,
+                    borderColor: district.riskColor,
+                  }}
+                >
+                  {district.riskLevel}
+                </span>
+              </div>
             </div>
           </div>
         </section>
@@ -139,7 +158,7 @@ export default function Landing({ onEnter, manager }) {
               <h2>Choose your area of focus.</h2>
             </div>
             <span>
-              04 pilot presets{" "}
+              {String(DISTRICTS.length).padStart(2, "0")} pilot presets{" "}
               <small>Approximate extents, not official boundaries</small>
             </span>
           </div>
@@ -159,16 +178,76 @@ export default function Landing({ onEnter, manager }) {
                 </div>
                 <h3>{d.name}</h3>
                 <p>{d.focus}</p>
+
+                <div className="district-card-telemetry">
+                  <span className="telemetry-badge hotspots">
+                    <Flame size={12} /> {d.detectedHotspots} Hotspots
+                  </span>
+                  <span className="telemetry-badge frp">
+                    <Zap size={12} /> {d.maxFrpMw} MW
+                  </span>
+                  <span
+                    className="telemetry-badge risk"
+                    style={{
+                      borderColor: d.riskColor,
+                      color: d.riskColor,
+                      background: `${d.riskColor}15`,
+                    }}
+                  >
+                    {d.riskLevel}
+                  </span>
+                </div>
+
                 <ArrowUpRight className="district-arrow" size={20} />
               </button>
             ))}
           </div>
           <div className="district-context">
-            <ScanLine size={22} />
-            <p>
-              <strong>{district.name}: </strong>
-              {district.description}
-            </p>
+            <ScanLine size={24} />
+            <div className="district-context-body">
+              <p className="district-context-desc">
+                <strong>{district.name}: </strong>
+                {district.description}
+              </p>
+              <div className="district-telemetry-grid">
+                <div className="telemetry-item">
+                  <span className="telemetry-label">Detected Hotspots</span>
+                  <span className="telemetry-value highlight">
+                    <Flame size={13} className="telemetry-icon" /> {district.detectedHotspots} Active
+                  </span>
+                </div>
+                <div className="telemetry-item">
+                  <span className="telemetry-label">Active Clusters</span>
+                  <span className="telemetry-value">{district.activeClusters} clusters</span>
+                </div>
+                <div className="telemetry-item">
+                  <span className="telemetry-label">Peak FRP</span>
+                  <span className="telemetry-value highlight-frp">
+                    <Zap size={13} className="telemetry-icon" /> {district.maxFrpMw} MW
+                  </span>
+                </div>
+                <div className="telemetry-item">
+                  <span className="telemetry-label">Avg Radiance</span>
+                  <span className="telemetry-value">{district.avgFrpMw} MW</span>
+                </div>
+                <div className="telemetry-item">
+                  <span className="telemetry-label">Thermal Anomaly</span>
+                  <span className="telemetry-value anomaly">{district.tempAnomaly}</span>
+                </div>
+                <div className="telemetry-item">
+                  <span className="telemetry-label">Dominant Source</span>
+                  <span className="telemetry-value">{district.dominantSource}</span>
+                </div>
+                <div className="telemetry-item">
+                  <span className="telemetry-label">Satellite Feed</span>
+                  <span className="telemetry-value">{district.satellite}</span>
+                </div>
+                <div className="telemetry-item">
+                  <span className="telemetry-label">Confidence</span>
+                  <span className="telemetry-value confidence">{district.confidence}</span>
+                </div>
+              </div>
+            </div>
             <button onClick={() => onEnter(district, manager)}>
               Inspect area <ArrowRight size={16} />
             </button>

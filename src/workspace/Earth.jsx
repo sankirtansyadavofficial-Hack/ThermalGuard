@@ -213,9 +213,10 @@ export default function Earth({ district, onSelect }) {
     );
     scene.add(rim);
     const markers = DISTRICTS.map((d) => {
+      const pinColor = d.riskColor ? parseInt(d.riskColor.replace("#", "0x")) : 0xff9559;
       const marker = new THREE.Mesh(
-        new THREE.SphereGeometry(0.017, 14, 10),
-        new THREE.MeshBasicMaterial({ color: 0xff9559 }),
+        new THREE.SphereGeometry(0.018, 14, 10),
+        new THREE.MeshBasicMaterial({ color: pinColor }),
       );
       marker.position.copy(position(d.lat, d.lon, 1.014));
       marker.userData.id = d.id;
