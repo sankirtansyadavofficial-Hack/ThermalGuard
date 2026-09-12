@@ -151,6 +151,9 @@ try {
   await page.getByLabel("Public demo PIN", { exact: true }).fill("2026");
   await page.screenshot({ path: ".build/earth-login.png" });
   await page.getByRole("button", { name: "Enter district workspace" }).click();
+  // All test decisions belong to explicit replay, never a live NASA event.
+  if (await page.getByRole("button", { name: "Live feed", exact: true }).count())
+    await page.getByRole("button", { name: "Demo replay", exact: true }).click();
   await page.locator(".spotlight-item").first().waitFor();
   assert.equal(
     await page.getByLabel("Geographic area").inputValue(),

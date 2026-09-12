@@ -13,6 +13,28 @@ npm run dev
 
 Open http://127.0.0.1:4173. Vite and the API share one server. No NASA key is required for the public South Asia feeds.
 
+### Real XGBoost model setup
+
+The current workspace already has the isolated model environment installed. On a new machine, install Python 3.12, then run the following once before using Smart Analyser:
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r analyser/requirements.txt
+npm run dev
+```
+
+On Linux/macOS use `python3.12 -m venv .venv` and `.venv/bin/python -m pip install -r analyser/requirements.txt`. Set server-only `PYTHON_BIN` if using a different compatible environment. Pins: XGBoost 3.1.3, NumPy 2.2.6, SciPy 1.15.3. No NASA key or paid service is needed for the default path.
+
+Open Smart Analyser in **Live feed** mode and choose a sensor, extent and time window. **Run real XGBoost analysis** performs actual Node/Python work: NASA fetch → validation → training → temporal evaluation → scoring. The displayed duration is measured, not an inserted animation delay. One heavy job can run at a time; network requests timeout after 25 seconds and the model after 120 seconds. If Python/data is unavailable, an actionable error replaces the report; fake scores are never substituted.
+
+The model estimates **same-observation FRP**, not next-day fire risk or fire cause. It trains on the first UTC days of the seven-day regional NASA dataset, uses the penultimate day for residual ranking and tests on the last day (which may be partial). The UI publishes actual sample counts, MAE/RMSE, training-median comparison, training gain importance and per-input tree contributions. No hazard labels, fabricated weather or imagined facility baselines are used.
+
+CSV mode accepts up to 2 MB / 15,000 rows with `latitude,longitude,frp,acq_date,acq_time,bright_ti4,bright_ti5,scan,track,daynight`. Use FIRMS units: FRP in MW, brightness in K, pixel dimensions in km, UTC date YYYY-MM-DD, time HHMM and D/N. Select the correct satellite source. Uploaded data is unverified and is scored in full, not cropped to the chosen extent; it never becomes training data or a NASA review record. Missing/out-of-range model fields are excluded and counted rather than guessed. `analyser/hotspots_data.csv` is the **legacy synthetic demo**, not a validated training dataset.
+
+Reports include observed/model FRP, residual percentile (not probability), same-sensor earlier detections within 5 km, provenance and real timings. JSON includes full evidence; CSV contains scored rows and source metadata. Historical comparisons use only prior UTC days in the available week, not a 30-day or annual facility baseline. In-sample/calibration membership is visible. A 95th-percentile excess is an exploratory review flag, not proof of an emergency.
+
+Completed reports persist in SQLite `analysis_runs`; retrieve a known run with `GET /api/analysis/jobs/:id`. `data/analysis/<run-id>/model.json` and `training.json` retain the actual model and exact normalized NASA training snapshot; the report records its SHA-256 digest. The `.venv/` and `data/` directories are ignored by Git. Back up these files together; repeated runs retain artifacts and consume local disk. Leaving the analysis screen stops browser polling but an already accepted backend job finishes. A server restart interrupts in-flight work; rerun when prompted. No source or Pages deployment is performed by analysis.
+
 To run the compiled build:
 
 ```powershell
@@ -43,6 +65,7 @@ Source repository: [sankirtansyadavofficial-Hack/ThermalGuard](https://github.co
 - Confirm/reject/defer decisions, six human-assigned source classes and persistent SQLite audit history.
 - Saved areas, observed-activity analytics and filtered CSV/GeoJSON evidence exports.
 - Five-minute caching, coalesced requests, timestamped stale recovery and explicitly synthetic replay.
+- Actual CPU XGBoost, asynchronous analysis API, CSV input scoring, temporal benchmark, anomaly evidence chart/table and reproducible model artifacts.
 
 ## Configuration
 
@@ -51,6 +74,7 @@ Copy `.env.example` to `.env` if needed. Never commit secrets.
 | Variable          | Purpose                                                                                                                                                                                     |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `PORT`            | Default 4173.                                                                                                                                                                               |
+| `PYTHON_BIN` | Optional model Python executable path; defaults to the project's .venv. Never expose it as a VITE_ variable. |
 | `HOST`            | Default 127.0.0.1.                                                                                                                                                                          |
 | `FIRMS_MAP_KEY`   | Optional server-only [NASA FIRMS key](https://firms.modaps.eosdis.nasa.gov/api/map_key/). Enables Area API for 1/2-day requests; 7-day requests use public CSV. Never use a `VITE_` prefix. |
 | `WORKSPACE_TOKEN` | Optional local API bearer token. At least 24 characters required before non-loopback binding. Enter this in Connection settings, not the NASA key.                                          |
@@ -72,6 +96,7 @@ Publish the honest browser-only presentation build with `npm run deploy:pages`. 
 
 ```powershell
 npm test
+npm run test:model
 npm run lint
 npm run build
 # With npm start running and Chrome installed:
@@ -79,6 +104,8 @@ npm run test:browser
 # Pages checks: first run npm run build:pages, then in another terminal:
 # npx vite preview --host 127.0.0.1 --port 4176 --base=/ThermalGuard/
 npm run test:earth
+# With full-stack server running on 4175 (or set ANALYSIS_TEST_URL):
+npm run test:analysis
 ```
 
 Set `BROWSER_EXECUTABLE` for another Chrome/Chromium path. Browser checks create/remove their own synthetic reviews and temporary watch area, exercise exports and mobile layouts, and save screenshots to ignored `.build/`. API tests use an isolated database. Live NASA checks are separate.
@@ -89,7 +116,7 @@ Set `BROWSER_EXECUTABLE` for another Chrome/Chromium path. Browser checks create
 
 Grid/day boundaries can split one physical incident. Repeated detections are not independent incident confirmations. India extent is a rectangle and includes neighboring territory; the public download covers South Asia even if a custom extent lies elsewhere.
 
-A trained six-class XGBoost model, historical facility baselines, facility overlap, Sentinel/WorldCover/ERA5 fusion, measured accuracy, verified user roles and emergency dispatch remain future work. They need labeled data, additional pipelines and independent validation. Satellite overpasses and clouds limit visibility. No claim of continuous surveillance or official warning service is made.
+A trained six-class cause classifier, long-term facility baselines, verified facility overlap, Sentinel/WorldCover/ERA5 fusion, verified user roles and emergency dispatch remain future work. The actual XGBoost FRP regression now has measured temporal error; this is not incident-classification accuracy, spatial generalization or safety validation. Satellite overpasses and clouds limit visibility. No claim of continuous surveillance or official warning service is made.
 
 ## Source of truth
 

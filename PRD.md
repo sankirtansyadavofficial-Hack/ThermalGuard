@@ -1,5 +1,18 @@
 # ThermalGuard prototype
 
+## Active scope: real observation analysis (12 September 2026)
+
+This section supersedes older exclusions of ML training below. The user has no labeled source-class dataset and explicitly chose real-observation scoring. Replace the simulated Smart Analyser with a real server-side XGBoost regression of log(1 + measured FRP), using VIIRS radiometry, pixel geometry, location and acquisition time. Never use target FRP as an input feature or train on the supplied scoring CSV. This is same-observation consistency screening, not a fire forecast, cause classifier or emergency-risk probability.
+
+- Fetch real NASA FIRMS feeds server-side, retain source URLs, acquisition/retrieval timestamps, quality counts, cache/outage status and actual timings. Default the Node application to real data; synthetic replay remains explicit and cannot enter real model analysis.
+- Train from seven-day South Asia observations for the selected sensor. Split chronologically into training days, calibration day and final held-out day; publish actual MAE/RMSE and median baseline comparison. Refuse insufficient data. Mark in-sample, calibration and held-out results separately.
+- Asynchronous bounded analysis jobs expose actual processing stages, with no artificial delay or fabricated progress percentages. Persist completed evidence reports and model artifacts locally.
+- Score the selected NASA extent/window or a validated user-uploaded FIRMS CSV (unverified provenance). Show observed versus modeled FRP, residual percentile, measured prior nearby detections, missing inputs, out-of-domain warnings and downloadable JSON/CSV evidence.
+- Preserve Earth, Street map, filters, evidence reviews, saved areas, exports and demo manager states. Remove fabricated facility/weather/land-cover/history and confidence claims from active analysis.
+- Scope is the local full-stack application. GitHub Pages remains a clearly labeled static replay; it cannot execute Python/Node. No hosting/account changes or automatic publication in this task.
+
+Success: NASA data is fetched and scored by the actual XGBoost library end to end; UI displays real timestamps/metrics/errors; invalid input, insufficient data, concurrency and model failures are tested; build/lint and desktop/mobile browser checks pass. Out of scope: verified hazard labels, independently validated safety performance, fabricated weather, dispatch, paid hosting and verified district identities.
+
 ## Purpose
 
 Deliver CompileX's satellite intelligence platform as a working Vite application: inspect NASA thermal detections, prioritize evidence for human review, and preserve analyst decisions. This application scope supersedes the parent workbook project's exclusion of prototype development.

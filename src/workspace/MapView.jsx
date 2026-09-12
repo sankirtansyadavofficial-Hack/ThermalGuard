@@ -15,7 +15,7 @@ export default function MapView({
     map = useRef(null),
     dots = useRef(null),
     select = useRef(onSelect);
-  const [layer, setLayer] = useState("dark"),
+  const [layer, setLayer] = useState("streets"),
     [tileError, setTileError] = useState(false);
   useEffect(() => {
     select.current = onSelect;

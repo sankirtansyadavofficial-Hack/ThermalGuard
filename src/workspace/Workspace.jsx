@@ -76,7 +76,7 @@ const TITLES = {
   ],
   analyser: [
     "Intelligence that assists, not decides.",
-    "XGBoost-powered risk analysis across all thermal hotspots. Every recommendation requires human review and approval.",
+    "Measured NASA observations, genuine XGBoost regression and a transparent evidence trail. No inferred fire causes.",
   ],
 };
 
@@ -202,7 +202,7 @@ export default function Workspace({ initialArea, manager, onHome, onLogout }) {
   function saved(id, decision) {
     setFeed((f) => ({
       ...f,
-      events: f.events.map((e) =>
+      events: (f?.events || []).map((e) =>
         e.id === id ? { ...e, review: decision } : e,
       ),
     }));
@@ -824,12 +824,16 @@ export default function Workspace({ initialArea, manager, onHome, onLogout }) {
           )}
           {tab === "analyser" && (
             <SmartAnalyser
+              key={`${source}:${days}:${mode}:${bboxParam}`}
               feed={feed}
               loading={loading}
               area={area}
               setArea={setArea}
               areas={[...PRESETS, ...DISTRICTS, ...areas]}
               manager={manager}
+              source={source}
+              days={days}
+              mode={mode}
               onSavedReview={saved}
             />
           )}
@@ -1283,8 +1287,9 @@ function Sources({
         <p>
           A trained six-class classifier, long-term facility baselines, Sentinel
           land-cover fusion and calibrated performance evaluation are future
-          work. This build uses transparent screening rules and human
-          classification.
+          work. The Smart Analyser now runs a real server-side XGBoost FRP
+          regression with temporal evaluation and seven-day measured nearby
+          history. It does not classify fire causes or predict emergencies.
         </p>
         <p>
           NASA near-real-time data can arrive after an overpass. Clouds, sensor

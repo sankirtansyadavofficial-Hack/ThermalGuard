@@ -16,6 +16,8 @@
     "test": "node --test tests/*.test.mjs",
     "test:browser": "node tests/browser-smoke.mjs",
     "test:earth": "node tests/earth-browser.mjs",
+    "test:analysis": "node tests/analysis-browser.mjs",
+    "test:model": "node scripts/test-model.mjs",
     "preview": "npm start"
   },
   "dependencies": {

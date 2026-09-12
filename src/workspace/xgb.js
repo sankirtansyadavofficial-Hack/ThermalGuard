@@ -1,4 +1,8 @@
 /**
+ * LEGACY DEMONSTRATION ONLY — NOT A TRAINED XGBOOST MODEL.
+ * No longer imported by the active application. Real analysis is implemented
+ * in server/analysis.mjs and analyser/xgboost_analyser.py. The hand-written
+ * rules below are preserved solely as historical demo code, not evidence.
  * xgb.js — Calibrated XGBoost Gradient-Boosted Decision Tree Engine (JavaScript)
  *
  * Implements Gradient Boosting with decision trees (CART) calibrated against
@@ -12,7 +16,7 @@
  * - Eliminates false alarm Critical alerts on baseline-conforming signals (e.g. 67 MW process heat in Ahmedabad).
  */
 
-const NUM_CLASSES = 4;
+const _NUM_CLASSES = 4;
 export const FEATURE_NAMES = [
   'FRP (MW)',
   'Brightness T4 (K)',
@@ -42,8 +46,8 @@ export const FEATURE_NAMES = [
  */
 export function predict(x) {
   const frp        = x[0] || 0;
-  const t4         = x[1] || 320;
-  const dt         = x[2] || 20;
+  const _t4        = x[1] || 320;
+  const _dt        = x[2] || 20;
   const rd         = x[3] || 0;
   const pr         = x[4] != null ? x[4] : 0.5;
   const builtUp    = x[6] || 30;

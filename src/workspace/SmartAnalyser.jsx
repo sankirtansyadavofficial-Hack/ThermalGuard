@@ -1,1198 +1,908 @@
-/**
- * SmartAnalyser.jsx — XGBoost-powered Thermal Hotspot Decision Support System
- *
- * Fully integrated with Workspace feed, area state, and baseline criteria:
- * - Reads directly from feed.events so FRP measurements (e.g. 67.0 MW) match Overview exactly.
- * - Single prominent "Run Smart XGBoost Analysis" button (no redundant buttons).
- * - Location selector synced with Workspace area state (Jamnagar, Ahmedabad, Ludhiana, Dhanbad, etc.).
- * - Model predictions incorporate historical past baseline data (Median, MAD, Persistence Rate).
- * - Eliminates false alarm Critical classifications on routine flares or standard process heat.
- * - Deep Evidence Telemetry Dossier Modal with multi-detection drilldown and human-in-the-loop sign-off.
- */
-
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  Activity,
   BrainCircuit,
-  AlertTriangle,
-  ShieldAlert,
-  ShieldCheck,
-  CheckCircle2,
+  Database,
+  Download,
+  FileUp,
+  Info,
   RefreshCw,
   Search,
-  Layers,
-  Wind,
-  Thermometer,
-  Activity,
-  MapPin,
-  Clock3,
-  X,
-  Download,
-  Flame,
-  Eye,
-  SlidersHorizontal,
-  Radio,
-  Check,
-  Cpu,
 } from "lucide-react";
-import { predict, featureImportance, featuresFromHotspot } from "./xgb";
-import { formatUTC } from "./client";
+import { api, formatUTC, STATIC_DEMO } from "./client";
+import EvidenceDrawer from "./EvidenceDrawer";
+import "./real-analyser.css";
 
-// Regional & Facility knowledge base for enriching satellite events
-const REGIONAL_CONTEXT = [
-  {
-    name: "Jamnagar",
-    state: "Gujarat",
-    match: (lat, lon) => Math.hypot(lat - 22.36, lon - 69.87) < 0.6,
-    facility: "Reliance Jamnagar Petroleum Refinery & Flare Complex",
-    facilityType: "Petroleum Refining (SEZ)",
-    focus: "Coastal Refining & Petrochemical Flare Corridor",
-    builtUp: 68, treeCover: 4, cropland: 6, bare: 22,
-    baseMedian: 85.0, baseMad: 12.0, basePersistence: 0.93,
-    weather: { wind_speed_ms: 4.2, wind_direction_deg: 225, temperature_c: 28.4, humidity_pct: 72 },
-  },
-  {
-    name: "Ahmedabad",
-    state: "Gujarat",
-    match: (lat, lon) => Math.hypot(lat - 23.03, lon - 72.58) < 0.6,
-    facility: "Vatva & Sabarmati Industrial Processing Corridor",
-    facilityType: "Chemical & Industrial Utilities",
-    focus: "Dense Urban–Industrial Interface & Gas Grid",
-    builtUp: 76, treeCover: 4, cropland: 8, bare: 12,
-    baseMedian: 52.0, baseMad: 7.5, basePersistence: 0.88,
-    weather: { wind_speed_ms: 3.2, wind_direction_deg: 210, temperature_c: 29.2, humidity_pct: 68 },
-  },
-  {
-    name: "Surat",
-    state: "Gujarat",
-    match: (lat, lon) => Math.hypot(lat - 21.71, lon - 73.02) < 0.6 || Math.hypot(lat - 21.17, lon - 72.83) < 0.6,
-    facility: "Hazira LNG Terminal & Petrochemical Manufacturing Hub",
-    facilityType: "LNG & Gas Processing",
-    focus: "Hazira Coastal Petrochemical Complex",
-    builtUp: 65, treeCover: 5, cropland: 8, bare: 22,
-    baseMedian: 78.0, baseMad: 10.5, basePersistence: 0.94,
-    weather: { wind_speed_ms: 3.8, wind_direction_deg: 205, temperature_c: 29.5, humidity_pct: 74 },
-  },
-  {
-    name: "Ludhiana",
-    state: "Punjab",
-    match: (lat, lon) => Math.hypot(lat - 30.91, lon - 75.85) < 0.6,
-    facility: "Punjab Agricultural Farmlands & Textile Sector",
-    facilityType: "Cropland / Agricultural Residue",
-    focus: "Post-Monsoon Agriculture & Stubble Burning",
-    builtUp: 6, treeCover: 3, cropland: 86, bare: 5,
-    baseMedian: 12.0, baseMad: 4.5, basePersistence: 0.16,
-    weather: { wind_speed_ms: 2.1, wind_direction_deg: 310, temperature_c: 24.8, humidity_pct: 58 },
-  },
-  {
-    name: "Dhanbad",
-    state: "Jharkhand",
-    match: (lat, lon) => Math.hypot(lat - 23.78, lon - 86.42) < 0.6,
-    facility: "Jharia Coalfield Seam Thermal Anomaly & Washery Hub",
-    facilityType: "Open-Cast Coal Mining / Thermal Seam",
-    focus: "Coalfield Landscape & Sub-Surface Combustion",
-    builtUp: 45, treeCover: 6, cropland: 6, bare: 43,
-    baseMedian: 72.0, baseMad: 11.0, basePersistence: 0.86,
-    weather: { wind_speed_ms: 3.6, wind_direction_deg: 185, temperature_c: 27.6, humidity_pct: 76 },
-  },
-];
-
-function resolveContext(lat, lon, fallbackName = "Regional Grid") {
-  for (const ctx of REGIONAL_CONTEXT) {
-    if (ctx.match(lat, lon)) return ctx;
-  }
-  return {
-    name: fallbackName,
-    state: "India",
-    facility: `${fallbackName} Monitored Sector`,
-    facilityType: "Industrial / Regional Zone",
-    focus: "Active Thermal Cluster",
-    builtUp: 45, treeCover: 10, cropland: 30, bare: 15,
-    baseMedian: 35.0, baseMad: 8.0, basePersistence: 0.70,
-    weather: { wind_speed_ms: 3.0, wind_direction_deg: 200, temperature_c: 28.0, humidity_pct: 65 },
-  };
-}
-
-const RISK_META = {
-  Critical: { color: "#ff4444", bg: "rgba(255,68,68,0.12)", border: "rgba(255,68,68,0.35)", icon: ShieldAlert, label: "Critical Risk" },
-  High:     { color: "#ff9559", bg: "rgba(255,149,89,0.12)", border: "rgba(255,149,89,0.35)", icon: ShieldAlert, label: "High Risk" },
-  Moderate: { color: "#f5a623", bg: "rgba(245,166,35,0.12)", border: "rgba(245,166,35,0.35)", icon: AlertTriangle, label: "Moderate Risk" },
-  Low:      { color: "#22c55e", bg: "rgba(34,197,94,0.12)", border: "rgba(34,197,94,0.35)", icon: CheckCircle2, label: "Low Risk" },
+const number = (v, digits = 2) =>
+  Number.isFinite(v)
+    ? v.toLocaleString("en-GB", { maximumFractionDigits: digits })
+    : "—";
+const duration = (ms) => `${number(ms / 1000)} s`;
+const featureNames = {
+  I4_K: "I4 brightness (K)",
+  I5_K: "I5 brightness (K)",
+  scan_km: "Pixel scan (km)",
+  track_km: "Pixel track (km)",
+  latitude: "Latitude",
+  longitude: "Longitude",
+  UTC_hour_sin: "UTC time · sine",
+  UTC_hour_cos: "UTC time · cosine",
+  daylight: "Day / night",
 };
 
-export default function SmartAnalyser({ feed, loading, area, setArea, areas, manager, onSavedReview }) {
-  const [analyzedAreaId, setAnalyzedAreaId] = useState(null);
-  const [isSimulating, setIsSimulating] = useState(false);
-  const [simStep, setSimStep] = useState(0);
-  const [simProgress, setSimProgress] = useState(0);
+function exportReport(report, type) {
+  let content = JSON.stringify(report, null, 2);
+  if (type === "csv") {
+    const records = report.rows.map((r) => ({
+      detection_id: r.id,
+      event_id: r.eventId,
+      acquisition_utc: r.acquiredAt,
+      latitude: r.lat,
+      longitude: r.lon,
+      observed_frp_mw: r.observedFrp,
+      modeled_frp_mw: r.expectedFrp,
+      excess_mw: r.excessMw,
+      residual_percentile_not_probability: r.residualPercentile,
+      evaluation_membership: r.split,
+      prior_5km_detections: r.baseline.priorDetections,
+      prior_observed_days: r.baseline.observedDays,
+      prior_median_frp_mw: r.baseline.medianFrp,
+      flags: r.flags.join("; "),
+      source: r.source,
+      input_provenance: report.provenance.input.provider,
+      source_url: report.provenance.input.sourceUrl,
+      retrieved_at: report.provenance.input.fetchedAt,
+      training_source_url: report.provenance.training.sourceUrl,
+      training_retrieved_at: report.provenance.training.fetchedAt,
+      stale_training: report.provenance.training.stale,
+      stale_input: report.provenance.input.stale,
+      model: report.model.version,
+      training_digest: report.model.trainingDigest,
+      run_id: report.runId,
+    }));
+    const keys = Object.keys(records[0]);
+    const cell = (value) => {
+      let text = String(value ?? "");
+      if (/^[=+\-@\t\r]/.test(text)) text = "'" + text;
+      return '"' + text.replaceAll('"', '""') + '"';
+    };
+    content = [
+      keys.join(","),
+      ...records.map((r) => keys.map((k) => cell(r[k])).join(",")),
+    ].join("\r\n");
+  }
+  const url = URL.createObjectURL(
+    new Blob([content], {
+      type: type === "csv" ? "text/csv;charset=utf-8" : "application/json",
+    }),
+  );
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `thermalguard-real-analysis-${report.runId}.${type}`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
-  // Table filters & view mode
-  const [searchQuery, setSearchQuery] = useState("");
-  const [riskFilter, setRiskFilter] = useState("All");
-  const [classFilter, setClassFilter] = useState("All");
-  const [sortBy, setSortBy] = useState("frp-desc");
-  const [viewGranularity, setViewGranularity] = useState("events"); // 'events' | 'detections'
+function Scatter({ rows }) {
+  const sample = rows.filter(
+    (_, i) => i % Math.max(1, Math.ceil(rows.length / 500)) === 0,
+  );
+  const max = Math.max(
+    1,
+    ...rows.map((r) => Math.max(r.observedFrp, r.expectedFrp)),
+  );
+  const scale = (n) => Math.log1p(n) / Math.log1p(max);
+  return (
+    <figure className="ra-scatter">
+      <svg
+        viewBox="0 0 480 250"
+        role="img"
+        aria-label={`Observed versus modeled FRP, logarithmic axes. ${sample.length} plotted observations; diagonal indicates agreement. Full data in the evidence table.`}
+      >
+        {[0, 0.5, 1].map((t) => (
+          <g key={t}>
+            <line
+              x1="52"
+              x2="455"
+              y1={207 - t * 180}
+              y2={207 - t * 180}
+              stroke="#283c43"
+            />
+            <text x="44" y={211 - t * 180} textAnchor="end">
+              {number(Math.expm1(t * Math.log1p(max)), 1)}
+            </text>
+            <text x={52 + t * 403} y="225" textAnchor="middle">
+              {number(Math.expm1(t * Math.log1p(max)), 1)}
+            </text>
+          </g>
+        ))}
+        <line
+          x1="52"
+          y1="207"
+          x2="455"
+          y2="27"
+          stroke="#889b9f"
+          strokeDasharray="5 5"
+        />
+        {sample.map((r) => (
+          <circle
+            key={r.id}
+            cx={52 + scale(r.expectedFrp) * 403}
+            cy={207 - scale(r.observedFrp) * 180}
+            r="3"
+            fill={r.unusual ? "#ffb76b" : "#59d8e6"}
+            opacity="0.65"
+          >
+            <title>{`${r.id}: observed ${number(r.observedFrp)} MW; modeled ${number(r.expectedFrp)} MW`}</title>
+          </circle>
+        ))}
+        <text x="252" y="245" textAnchor="middle">
+          Modeled FRP · MW (log scale)
+        </text>
+        <text transform="translate(13 125) rotate(-90)" textAnchor="middle">
+          Observed FRP · MW
+        </text>
+      </svg>
+      <figcaption>
+        Cyan: observations · Amber: unusually high residuals. Above the diagonal
+        means observed FRP exceeds the estimate. {sample.length}/{rows.length}{" "}
+        points shown.
+      </figcaption>
+    </figure>
+  );
+}
 
-  // Selected item for Dossier Modal
-  const [activeDossier, setActiveDossier] = useState(null);
+export default function SmartAnalyser({
+  feed,
+  loading,
+  area,
+  setArea,
+  areas,
+  source,
+  days,
+  mode,
+  onSavedReview,
+}) {
+  const [input, setInput] = useState("nasa"),
+    [file, setFile] = useState(null),
+    [csv, setCsv] = useState("");
+  const [job, setJob] = useState(null),
+    [jobId, setJobId] = useState(null),
+    [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(""),
+    [report, setReport] = useState(null);
+  const [search, setSearch] = useState(""),
+    [filter, setFilter] = useState("all"),
+    [page, setPage] = useState(0),
+    [detail, setDetail] = useState(null);
+  const [evidence, setEvidence] = useState(null),
+    [retry, setRetry] = useState(0);
+  useEffect(() => {
+    if (detail) document.getElementById("analysis-input-detail")?.scrollIntoView({ block: "nearest", behavior: "instant" });
+  }, [detail]);
+  const blocked = STATIC_DEMO || mode === "replay";
+  const busy = submitting || ["running", "queued"].includes(job?.status);
 
-  // Toast feedback
-  const [toastMessage, setToastMessage] = useState("");
-  const showToast = (msg) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(""), 3500);
-  };
-
-  // Safe area list
-  const availableAreas = useMemo(() => {
-    if (Array.isArray(areas) && areas.length > 0) return areas;
-    return [
-      { id: "india", name: "India extent", bbox: [68, 6, 98, 37] },
-      { id: "jamnagar", name: "Jamnagar", state: "Gujarat", bbox: [69.5, 21.8, 70.8, 22.9] },
-      { id: "ahmedabad", name: "Ahmedabad", state: "Gujarat", bbox: [71.8, 22.3, 73.1, 23.6] },
-      { id: "ludhiana", name: "Ludhiana", state: "Punjab", bbox: [75.3, 30.4, 76.5, 31.2] },
-      { id: "dhanbad", name: "Dhanbad", state: "Jharkhand", bbox: [86, 23.4, 86.9, 24.1] },
-    ];
-  }, [areas]);
-
-  // Current area object
-  const currentArea = useMemo(() => {
-    if (area && area.id) return area;
-    return availableAreas[0];
-  }, [area, availableAreas]);
-
-  // Transform raw feed events into unified, baseline-calibrated observation models
-  const rawEvents = useMemo(() => {
-    return feed?.events || [];
-  }, [feed]);
-
-  // Generate enriched dataset directly from feed.events
-  const enrichedDataset = useMemo(() => {
-    const records = [];
-
-    rawEvents.forEach((ev) => {
-      const ctx = resolveContext(ev.lat, ev.lon, currentArea.name);
-      const frp = Number(ev.maxFrp.toFixed(1));
-      const med = ctx.baseMedian;
-      const mad = ctx.baseMad;
-      const dev = Number(((frp - med) / Math.max(mad, 1.5)).toFixed(2));
-      const pr = ctx.basePersistence;
-
-      // Assign realistic classification governed by land cover and baseline persistence
-      let resolvedClass = ev.review?.classification || ev.classification;
-      if (!resolvedClass || resolvedClass === "Uncertain / Other") {
-        if (ctx.cropland >= 60) {
-          resolvedClass = "Agricultural Burning";
-        } else if (ctx.builtUp >= 55) {
-          if (pr >= 0.70) {
-            resolvedClass = frp > 90 ? "Routine Gas Flare" : "Persistent Industrial Heat";
-          } else if (dev >= 7.0) {
-            resolvedClass = "Acute Industrial Fire";
-          } else {
-            resolvedClass = "Persistent Industrial Heat";
-          }
-        } else if (ctx.treeCover >= 50) {
-          resolvedClass = "Wildfire / Natural Fire";
-        } else {
-          resolvedClass = "Persistent Industrial Heat";
+  useEffect(() => {
+    if (!jobId) return;
+    const controller = new AbortController();
+    let timer;
+    async function poll() {
+      try {
+        const value = await api(`/analysis/jobs/${jobId}`, {
+          signal: controller.signal,
+        });
+        setJob(value);
+        if (value.status === "completed") {
+          setReport(value.result);
+          setJobId(null);
+        } else if (value.status === "failed") {
+          setError(value.error);
+          setJobId(null);
+        } else timer = setTimeout(poll, 1000);
+      } catch (e) {
+        if (e.name !== "AbortError") {
+          setError(`Status check failed: ${e.message}`);
+          setJob((j) => ({ ...j, status: "connection-error" }));
         }
       }
-
-      // 19-dimensional feature vector for XGBoost
-      const featVector = [
-        frp,
-        342,
-        45,
-        dev,
-        pr,
-        25,
-        ctx.builtUp,
-        ctx.treeCover,
-        ctx.cropland,
-        ctx.weather.wind_speed_ms,
-        ctx.weather.humidity_pct,
-        ctx.weather.temperature_c,
-        ev.detections?.length || 3,
-        0.25,
-        0,
-        ev.confidence === "high" ? 1 : 0,
-        ev.confidence === "nominal" ? 1 : 0,
-        1,
-        med > 0 ? frp / med : 1,
-      ];
-
-      const pred = predict(featVector);
-
-      const item = {
-        id: ev.id,
-        rawEvent: ev,
-        district: ctx.name,
-        state: ctx.state,
-        facility: {
-          name: ctx.facility,
-          type: ctx.facilityType,
-          overlap: true,
-          distance_m: 120,
-        },
-        focus: ctx.focus,
-        lat: ev.lat,
-        lon: ev.lon,
-        peakFrp: frp,
-        meanFrp: Number((ev.meanFrp || frp).toFixed(1)),
-        firstSeen: ev.firstSeen,
-        lastSeen: ev.lastSeen,
-        satellite: ev.source || "VIIRS (NOAA-20)",
-        confidence: ev.confidence,
-        priority: ev.priority,
-        classification: resolvedClass,
-        baseline: {
-          median_frp: med,
-          mad_frp: mad,
-          robust_deviation: dev,
-          persistence_rate: pr,
-          days_seen_30d: 26,
-          days_seen_365d: 320,
-        },
-        landCover: {
-          built_up: ctx.builtUp,
-          tree_cover: ctx.treeCover,
-          cropland: ctx.cropland,
-          bare: ctx.bare,
-        },
-        weather: ctx.weather,
-        detections: ev.detections || [],
-        prediction: pred,
-        review: ev.review,
-      };
-
-      records.push(item);
-    });
-
-    return records;
-  }, [rawEvents, currentArea]);
-
-  // Handle place switch via dropdown (synchronizes with Workspace top toolbar)
-  const handleAreaSelect = (e) => {
-    const selectedId = e.target.value;
-    const targetObj = availableAreas.find((a) => a.id === selectedId);
-    if (targetObj && typeof setArea === "function") {
-      setArea(targetObj);
-      setAnalyzedAreaId(null); // Prompt analysis for new area
     }
-  };
-
-  // Run high-tech simulation pipeline
-  const runSimulation = () => {
-    setIsSimulating(true);
-    setSimStep(1);
-    setSimProgress(15);
-
-    const t1 = setTimeout(() => {
-      setSimStep(2);
-      setSimProgress(45);
-    }, 450);
-
-    const t2 = setTimeout(() => {
-      setSimStep(3);
-      setSimProgress(75);
-    }, 950);
-
-    const t3 = setTimeout(() => {
-      setSimStep(4);
-      setSimProgress(95);
-    }, 1450);
-
-    const t4 = setTimeout(() => {
-      setSimProgress(100);
-      setIsSimulating(false);
-      setAnalyzedAreaId(currentArea.id);
-      showToast(`XGBoost Analysis completed for ${currentArea.name}`);
-    }, 1850);
-
+    poll();
     return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
-      clearTimeout(t4);
+      controller.abort();
+      clearTimeout(timer);
     };
-  };
+  }, [jobId, retry]);
 
-  // Filter and Sort Table Rows
-  const filteredRows = useMemo(() => {
-    if (!analyzedAreaId) return [];
-
-    let list = enrichedDataset.filter((item) => {
-      // Risk filter
-      if (riskFilter !== "All" && item.prediction.label !== riskFilter) return false;
-
-      // Class filter
-      if (classFilter !== "All" && item.classification !== classFilter) return false;
-
-      // Search query
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const str = `${item.id} ${item.district} ${item.facility.name} ${item.classification} ${item.prediction.label}`.toLowerCase();
-        if (!str.includes(q)) return false;
-      }
-
-      return true;
-    });
-
-    list.sort((a, b) => {
-      if (sortBy === "frp-desc") return b.peakFrp - a.peakFrp;
-      if (sortBy === "frp-asc") return a.peakFrp - b.peakFrp;
-      if (sortBy === "conf-desc") return b.prediction.score - a.prediction.score;
-      if (sortBy === "dev-desc") return b.baseline.robust_deviation - a.baseline.robust_deviation;
-      if (sortBy === "id-asc") return a.id.localeCompare(b.id);
-      return 0;
-    });
-
-    return list;
-  }, [enrichedDataset, analyzedAreaId, riskFilter, classFilter, searchQuery, sortBy]);
-
-  // Aggregate executive metrics
-  const stats = useMemo(() => {
-    const counts = { Critical: 0, High: 0, Moderate: 0, Low: 0 };
-    let totalFrp = 0;
-    let totalConf = 0;
-
-    enrichedDataset.forEach((item) => {
-      const lbl = item.prediction.label;
-      counts[lbl] = (counts[lbl] || 0) + 1;
-      totalFrp += item.peakFrp;
-      totalConf += item.prediction.score;
-    });
-
-    const total = enrichedDataset.length || 1;
-    return {
-      counts,
-      total: enrichedDataset.length,
-      meanFrp: (totalFrp / total).toFixed(1),
-      avgConfidence: Math.round((totalConf / total) * 100),
-    };
-  }, [enrichedDataset]);
-
-  // Save human review determination
-  const handleSaveDecision = (eventId, status, note) => {
-    const decisionObj = {
-      status,
-      classification: activeDossier?.classification || "Persistent Industrial Heat",
-      note: note || `Analyst determination: ${status}`,
-      analyst: manager?.name || "Senior Duty Analyst",
-      created_at: new Date().toISOString(),
-    };
-
-    if (typeof onSavedReview === "function") {
-      onSavedReview(eventId, decisionObj);
+  async function run() {
+    setError("");
+    setReport(null);
+    setDetail(null);
+    setPage(0);
+    setSubmitting(true);
+    try {
+      const value = await api("/analysis/jobs", {
+        method: "POST",
+        body: JSON.stringify({
+          source,
+          days: Number(days),
+          bbox: area.bbox,
+          ...(input === "csv" ? { csv } : {}),
+        }),
+      });
+      setJob(value);
+      setJobId(value.id);
+    } catch (e) {
+      setError(e.message);
+      setJob(null);
+    } finally {
+      setSubmitting(false);
     }
+  }
 
-    showToast(`Decision saved for ${eventId}: ${status}`);
-    setActiveDossier((prev) => (prev && prev.id === eventId ? { ...prev, review: decisionObj } : prev));
-  };
+  async function upload(e) {
+    const chosen = e.target.files?.[0];
+    setError("");
+    setCsv("");
+    setFile(null);
+    setReport(null);
+    setDetail(null);
+    if (!chosen) return;
+    if (chosen.size > 2 * 1024 * 1024) {
+      setError("Choose a FIRMS CSV no larger than 2 MB.");
+      return;
+    }
+    try {
+      setCsv(await chosen.text());
+      setFile(chosen.name);
+    } catch {
+      setError("Could not read this file. Choose it again.");
+    }
+  }
 
-  // Export evidence table as CSV
-  const exportEvidenceTable = () => {
-    if (!enrichedDataset.length) return;
-    const headers = [
-      "Event_ID",
-      "District",
-      "State",
-      "Facility_Name",
-      "Facility_Type",
-      "Coordinates_Lat",
-      "Coordinates_Lon",
-      "Peak_FRP_MW",
-      "Mean_FRP_MW",
-      "Baseline_Median_FRP",
-      "Robust_Deviation_Sigma",
-      "Persistence_Rate",
-      "Source_Classification",
-      "XGBoost_Risk_Level",
-      "Model_Confidence_Pct",
-      "Review_Status",
-      "Detections_Count",
-      "Last_Acquisition_UTC",
-    ];
-
-    const rows = enrichedDataset.map((item) => [
-      `"${item.id}"`,
-      `"${item.district}"`,
-      `"${item.state}"`,
-      `"${item.facility.name}"`,
-      `"${item.facility.type}"`,
-      item.lat.toFixed(4),
-      item.lon.toFixed(4),
-      item.peakFrp,
-      item.meanFrp,
-      item.baseline.median_frp,
-      item.baseline.robust_deviation,
-      item.baseline.persistence_rate,
-      `"${item.classification}"`,
-      `"${item.prediction.label}"`,
-      (item.prediction.score * 100).toFixed(1),
-      `"${item.review?.status || "Pending Review"}"`,
-      item.detections.length,
-      `"${item.lastSeen}"`,
-    ]);
-
-    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `thermalguard-xgboost-${currentArea.name.toLowerCase().replace(/\s+/g, "-")}-${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    showToast("Evidence spreadsheet exported successfully.");
-  };
-
-  const isAnalyzed = analyzedAreaId === currentArea.id;
+  const filtered = useMemo(
+    () =>
+      (report?.rows || []).filter(
+        (r) =>
+          (filter === "all" ||
+            (filter === "unusual" && r.unusual) ||
+            (filter === "held-out" && r.split === "held-out day") ||
+            (filter === "limited" && r.flags.length > 0)) &&
+          `${r.id} ${r.lat} ${r.lon} ${r.acquiredAt}`
+            .toLowerCase()
+            .includes(search.toLowerCase()),
+      ),
+    [report, filter, search],
+  );
+  const rows = filtered.slice(page * 25, (page + 1) * 25);
+  const model = report?.model;
+  const stale =
+    report &&
+    (report.provenance.training.stale || report.provenance.input.stale);
+  const selectedEvent = report?.events.find((e) => e.id === evidence);
+  const statusText = job?.stage || "Ready for a real backend run";
 
   return (
-    <div className="smart-analyser-container">
-      {/* Toast */}
-      {toastMessage && (
-        <div className="analyser-toast">
-          <CheckCircle2 size={16} color="#55d4f5" />
-          <span>{toastMessage}</span>
-        </div>
-      )}
-
-      {/* ── Top Control & Location Bar (Exactly ONE Analysis Button) ──────── */}
-      <section className="analyser-control-card">
-        <div className="analyser-control-top">
-          <div className="analyser-brand-tag">
-            <div className="pulse-icon-box">
-              <BrainCircuit size={20} color="#55d4f5" />
-            </div>
-            <div>
-              <h2>XGBoost Diagnostic & Decision Support Engine</h2>
-              <p>
-                Fused with live observation feed, historical baseline envelopes, and ESA WorldCover land use contexts.
-              </p>
-            </div>
+    <div className="real-analyser">
+      <section className="ra-hero">
+        <div className="ra-heading">
+          <div className="ra-symbol">
+            <BrainCircuit size={26} />
           </div>
-
-          {/* Location Selector */}
-          <div className="place-select-group">
-            <label htmlFor="area-sync-select">
-              <MapPin size={15} color="#55d4f5" />
-              <span>Target Monitoring Extent:</span>
-            </label>
-            <div className="select-wrapper">
-              <select
-                id="area-sync-select"
-                value={currentArea.id}
-                onChange={handleAreaSelect}
-                disabled={isSimulating}
-              >
-                {availableAreas.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name} {a.state ? `(${a.state})` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div>
+            <span className="eyebrow">MEASURED DATA / EXPLAINABLE MODEL</span>
+            <h2>From thermal signals to better questions.</h2>
+            <p>
+              Real NASA observations. Server-side XGBoost. Evidence you can
+              inspect.
+            </p>
           </div>
         </div>
-
-        {/* Status Pill & The ONLY Analysis Button */}
-        <div className="analyser-action-bar">
-          <div className="place-meta-pill">
-            <span className="dot-active" />
-            <strong>{currentArea.name}</strong>
-            <span className="divider">·</span>
-            <span>{enrichedDataset.length} thermal events ({rawEvents.reduce((acc, ev) => acc + (ev.detections?.length || 1), 0)} overpass detections)</span>
-            <span className="divider">·</span>
-            <span className="badge-count">Live Overview Sync</span>
-          </div>
-
-          {/* SINGLE ACTION BUTTON */}
+        <div className="ra-controls">
+          <label>
+            Monitoring extent
+            <select
+              aria-label="Monitoring extent"
+              value={area.id}
+              disabled={busy}
+              onChange={(e) =>
+                setArea(areas.find((a) => a.id === e.target.value))
+              }
+            >
+              {areas.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Analysis input
+            <select
+              aria-label="Analysis input"
+              value={input}
+              disabled={busy || blocked}
+              onChange={(e) => {
+                setInput(e.target.value);
+                setReport(null);
+                setDetail(null);
+              }}
+            >
+              <option value="nasa">NASA extent / current window</option>
+              <option value="csv">Upload measured FIRMS CSV</option>
+            </select>
+          </label>
           <button
-            className={`btn-run-analysis ${isSimulating ? "running" : ""} ${isAnalyzed ? "re-run" : "fresh"}`}
-            onClick={runSimulation}
-            disabled={isSimulating || loading}
+            className="primary"
+            onClick={run}
+            disabled={
+              busy ||
+              blocked ||
+              (input === "nasa" && loading) ||
+              (input === "csv" && !csv)
+            }
           >
-            {isSimulating ? (
-              <>
-                <RefreshCw size={16} className="spin-slow" />
-                <span>Evaluating XGBoost Telemetry...</span>
-              </>
-            ) : isAnalyzed ? (
-              <>
-                <RefreshCw size={16} />
-                <span>Re-run Diagnostic Simulation</span>
-              </>
+            {busy ? (
+              <RefreshCw size={17} className="spin" />
             ) : (
-              <>
-                <Cpu size={16} />
-                <span>Run Smart XGBoost Analysis</span>
-              </>
+              <BrainCircuit size={17} />
             )}
+            {busy
+              ? "Processing real observations…"
+              : "Run real XGBoost analysis"}
           </button>
         </div>
+        <div className="ra-provenance">
+          <span>
+            <Database size={14} /> {source} ·{" "}
+            {days === "1" ? "24 hours" : `${days} days`} · rectangular extent
+          </span>
+          <span>{feed?.meta?.detectionCount ?? "—"} feed detections</span>
+          <span>Training: seven-day South Asia feed</span>
+        </div>
+        {input === "csv" && (
+          <div className="ra-upload">
+            <label>
+              <FileUp size={17} /> FIRMS CSV · maximum 2 MB
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                onChange={upload}
+                disabled={busy}
+              />
+            </label>
+            <p>
+              {file || "Your CSV is scored, never used to train the model."}{" "}
+              Required: latitude, longitude, frp, acq_date, acq_time,
+              bright_ti4, bright_ti5, scan, track, daynight. Set the correct
+              sensor above. Uploaded source provenance is unverified; the full
+              file is scored, not cropped to the selected extent.
+            </p>
+          </div>
+        )}
       </section>
 
-      {/* ── High-Tech Simulation Screen ──────────────────────────────────── */}
-      {isSimulating && (
-        <section className="simulation-overlay-card">
-          <div className="simulation-grid">
-            <div className="radar-scanner">
-              <div className="radar-circle radar-c1" />
-              <div className="radar-circle radar-c2" />
-              <div className="radar-circle radar-c3" />
-              <div className="radar-sweep" />
-              <div className="radar-blip b1" />
-              <div className="radar-blip b2" />
-              <div className="radar-blip b3" />
-            </div>
-
-            <div className="simulation-content">
-              <div className="sim-header">
-                <span className="live-telemetry-badge">
-                  <Radio size={12} className="pulse-fast" /> VIIRS 375m SATELLITE OVERPASS PIPELINE
-                </span>
-                <h3>Analyzing {currentArea.name} Thermal Observations</h3>
-              </div>
-
-              <div className="sim-progress-track">
-                <div className="sim-progress-bar" style={{ width: `${simProgress}%` }} />
-              </div>
-
-              <ul className="sim-stages-list">
-                <li className={simStep >= 1 ? (simStep === 1 ? "active" : "done") : "waiting"}>
-                  <span className="stage-num">01</span>
-                  <div className="stage-info">
-                    <strong>Matching NASA VIIRS Radiance with Overview Feed</strong>
-                    <small>Extracting peak radiative power (FRP) and sensor channel brightness...</small>
-                  </div>
-                  {simStep > 1 && <Check size={14} color="#22c55e" />}
-                </li>
-
-                <li className={simStep >= 2 ? (simStep === 2 ? "active" : "done") : "waiting"}>
-                  <span className="stage-num">02</span>
-                  <div className="stage-info">
-                    <strong>Evaluating Historical Past Baseline Criteria</strong>
-                    <small>Cross-referencing 30-day median FRP, MAD dispersion, and persistence rate...</small>
-                  </div>
-                  {simStep > 2 && <Check size={14} color="#22c55e" />}
-                </li>
-
-                <li className={simStep >= 3 ? (simStep === 3 ? "active" : "done") : "waiting"}>
-                  <span className="stage-num">03</span>
-                  <div className="stage-info">
-                    <strong>Executing 80 Gradient-Boosted Decision Trees (19 Features)</strong>
-                    <small>Filtering out false alarms on routine flares and continuous process boilers...</small>
-                  </div>
-                  {simStep > 3 && <Check size={14} color="#22c55e" />}
-                </li>
-
-                <li className={simStep >= 4 ? (simStep === 4 ? "active" : "done") : "waiting"}>
-                  <span className="stage-num">04</span>
-                  <div className="stage-info">
-                    <strong>Calibrating Risk Softprob & Evidence Dossier</strong>
-                    <small>Compiling structured tabular dataset with human-in-the-loop validation...</small>
-                  </div>
-                  {simProgress === 100 && <Check size={14} color="#22c55e" />}
-                </li>
-              </ul>
-            </div>
+      {blocked ? (
+        <div className="ra-notice" role="status">
+          <Info size={19} />
+          <div>
+            <strong>
+              Real analysis requires the full-stack application in Live mode.
+            </strong>
+            <p>
+              {STATIC_DEMO
+                ? "This GitHub Pages build cannot execute Node or Python. Run npm run dev locally after installing the model requirements. This page will not manufacture XGBoost results."
+                : "Switch from Demo replay to Live NASA above. Synthetic scenarios cannot be scored as real evidence."}
+            </p>
           </div>
-        </section>
+        </div>
+      ) : (
+        <div className="ra-process" aria-live="polite">
+          <Activity size={17} />
+          <span>{statusText}</span>
+          {job && <span>{duration(job.elapsedMs || 0)} measured elapsed</span>}
+          <small>
+            Fetch → validate → train → evaluate → score. No artificial delay.
+          </small>
+        </div>
       )}
-
-      {/* ── Unanalyzed Placeholder State (NO duplicate button) ────────────── */}
-      {!isAnalyzed && !isSimulating && (
-        <section className="analyser-idle-card">
-          <div className="idle-icon-wrap">
-            <Cpu size={36} color="#55d4f5" />
+      {error && (
+        <div className="ra-notice ra-warning" role="alert">
+          <Info size={18} />
+          <div>
+            {error}
+            {jobId && !busy && (
+              <button
+                className="secondary"
+                onClick={() => {
+                  setError("");
+                  setRetry((r) => r + 1);
+                }}
+              >
+                Retry status check
+              </button>
+            )}
           </div>
-          <h3>Diagnostic Telemetry Ready for {currentArea.name}</h3>
-          <p>
-            The XGBoost Decision Engine has indexed <strong>{enrichedDataset.length} active thermal events</strong> directly
-            from the <strong>{currentArea.name}</strong> overview feed. Click the <strong>“Run Smart XGBoost Analysis”</strong>{" "}
-            button in the toolbar above to commence multi-spectral anomaly scoring with baseline comparison.
-          </p>
-        </section>
+        </div>
       )}
-
-      {/* ── Tabular Evidence Results Section ─────────────────────────────── */}
-      {isAnalyzed && !isSimulating && (
-        <div className="analyser-results-flow">
-          {/* Executive Risk KPIs Row */}
-          <div className="analyser-kpi-grid">
-            <div className="kpi-card kpi-critical">
-              <span className="kpi-label">Critical Escalations</span>
-              <div className="kpi-num-row">
-                <span className="kpi-num">{stats.counts.Critical}</span>
-                <ShieldAlert size={18} color="#ff4444" />
-              </div>
-              <span className="kpi-sub">Acute anomaly outliers</span>
-            </div>
-
-            <div className="kpi-card kpi-high">
-              <span className="kpi-label">High Priority</span>
-              <div className="kpi-num-row">
-                <span className="kpi-num">{stats.counts.High}</span>
-                <AlertTriangle size={18} color="#ff9559" />
-              </div>
-              <span className="kpi-sub">Elevated thermal deviation</span>
-            </div>
-
-            <div className="kpi-card kpi-moderate">
-              <span className="kpi-label">Moderate / Watch</span>
-              <div className="kpi-num-row">
-                <span className="kpi-num">{stats.counts.Moderate}</span>
-                <Activity size={18} color="#f5a623" />
-              </div>
-              <span className="kpi-sub">Routine gas flare / crop burn</span>
-            </div>
-
-            <div className="kpi-card kpi-low">
-              <span className="kpi-label">Low / Routine</span>
-              <div className="kpi-num-row">
-                <span className="kpi-num">{stats.counts.Low}</span>
-                <CheckCircle2 size={18} color="#22c55e" />
-              </div>
-              <span className="kpi-sub">Baseline process heat</span>
-            </div>
-
-            <div className="kpi-card kpi-stats">
-              <span className="kpi-label">Mean Observed FRP</span>
-              <div className="kpi-num-row">
-                <span className="kpi-num">{stats.meanFrp}</span>
-                <span className="kpi-unit">MW</span>
-              </div>
-              <span className="kpi-sub">Exact Overview match</span>
-            </div>
-
-            <div className="kpi-card kpi-stats">
-              <span className="kpi-label">Mean Confidence</span>
-              <div className="kpi-num-row">
-                <span className="kpi-num">{stats.avgConfidence}%</span>
-                <BrainCircuit size={18} color="#55d4f5" />
-              </div>
-              <span className="kpi-sub">Baseline cross-validated</span>
-            </div>
-          </div>
-
-          {/* Mandatory Human-in-the-Loop Assistive Notice */}
-          <div className="human-approval-notice">
-            <AlertTriangle size={18} color="#f5a623" className="flex-shrink-0" />
-            <div className="notice-content">
-              <strong>Human-in-the-Loop Supervisory Mandate:</strong>
+      {!report && !busy && !blocked && (
+        <section className="ra-intro">
+          <h3>What will this analysis tell you?</h3>
+          <div className="ra-grid three">
+            <div>
+              <span>01 / OBSERVE</span>
+              <h4>What did VIIRS measure?</h4>
               <p>
-                XGBoost classifications function strictly as an assistive advisory tool for the district thermal officer.
-                Predictions incorporate past data baseline envelopes (median FRP and persistence rate) to prevent false alerts.
-                Final operational actions require human verification and approval below.
+                FRP, thermal brightness, coordinates, pixel size and UTC
+                acquisition time. No guessed weather or facility names.
+              </p>
+            </div>
+            <div>
+              <span>02 / COMPARE</span>
+              <h4>Is the heat unusual for these inputs?</h4>
+              <p>
+                The model estimates FRP from measured inputs and ranks its
+                residual against a separate calibration day.
+              </p>
+            </div>
+            <div>
+              <span>03 / INVESTIGATE</span>
+              <h4>What needs human corroboration?</h4>
+              <p>
+                Check nearby prior detections, inspect raw evidence and record a
+                review. Anomaly does not establish cause or danger.
               </p>
             </div>
           </div>
-
-          {/* Table Controls Toolbar */}
-          <div className="table-controls-bar">
-            {/* Search */}
-            <div className="search-control">
-              <Search size={15} color="rgba(255,255,255,0.4)" />
-              <input
-                type="text"
-                placeholder="Search by Event ID, facility, sector, or classification..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              {searchQuery && (
-                <button className="btn-clear-search" onClick={() => setSearchQuery("")}>
-                  <X size={13} />
-                </button>
-              )}
-            </div>
-
-            {/* Risk Filter */}
-            <div className="filter-pill-group">
-              <span className="filter-label">Risk:</span>
-              {["All", "Critical", "High", "Moderate", "Low"].map((lvl) => (
-                <button
-                  key={lvl}
-                  className={`btn-pill ${riskFilter === lvl ? "active" : ""}`}
-                  onClick={() => setRiskFilter(lvl)}
-                >
-                  {lvl}
-                </button>
-              ))}
-            </div>
-
-            {/* Classification Filter */}
-            <div className="select-control">
-              <Layers size={14} color="rgba(255,255,255,0.4)" />
-              <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)}>
-                <option value="All">All Source Classes</option>
-                <option value="Routine Gas Flare">Routine Gas Flare</option>
-                <option value="Persistent Industrial Heat">Persistent Industrial Heat</option>
-                <option value="Acute Industrial Fire">Acute Industrial Fire</option>
-                <option value="Agricultural Burning">Agricultural Burning</option>
-                <option value="Wildfire / Natural Fire">Wildfire / Natural Fire</option>
-              </select>
-            </div>
-
-            {/* Sort Order */}
-            <div className="select-control">
-              <SlidersHorizontal size={14} color="rgba(255,255,255,0.4)" />
-              <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
-                <option value="frp-desc">Peak FRP: Highest First</option>
-                <option value="frp-asc">Peak FRP: Lowest First</option>
-                <option value="conf-desc">Model Confidence</option>
-                <option value="dev-desc">Anomaly Deviation (σ)</option>
-                <option value="id-asc">Event ID (A–Z)</option>
-              </select>
-            </div>
-
-            {/* Export CSV Button */}
-            <button className="btn-export-csv" onClick={exportEvidenceTable}>
-              <Download size={14} />
-              <span>Export CSV</span>
-            </button>
-          </div>
-
-          {/* ── High-Fidelity Tabular Evidence Dataset ─────────────────────── */}
-          <div className="table-responsive-wrapper">
-            <table className="analyser-evidence-table">
-              <thead>
-                <tr>
-                  <th>Event ID & Sector</th>
-                  <th>Coordinates</th>
-                  <th>Satellite & Overpass</th>
-                  <th>Observed FRP (MW)</th>
-                  <th>Source Classification</th>
-                  <th>XGBoost Risk Assessment</th>
-                  <th>Confidence</th>
-                  <th>Manager Review</th>
-                  <th style={{ textAlign: "right" }}>Evidence Telemetry</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRows.length > 0 ? (
-                  filteredRows.map((item) => {
-                    const pred = item.prediction;
-                    const rMeta = RISK_META[pred.label] || RISK_META.Moderate;
-                    const RiskIcon = rMeta.icon;
-                    const isReviewed = Boolean(item.review);
-
-                    return (
-                      <tr key={item.id} className={`table-row-risk-${pred.label.toLowerCase()}`}>
-                        {/* 1. Event ID & Facility */}
-                        <td>
-                          <div className="cell-id-facility">
-                            <span className="hotspot-badge">{item.id.toUpperCase()}</span>
-                            <strong className="facility-title">{item.facility.name}</strong>
-                            <div className="facility-meta">
-                              <span>{item.facility.type}</span>
-                              <span className="overlap-tag">On-Site SEZ</span>
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* 2. Coordinates */}
-                        <td>
-                          <div className="cell-coordinates">
-                            <span className="mono-coords">
-                              {item.lat.toFixed(4)}°N, {item.lon.toFixed(4)}°E
-                            </span>
-                            <span className="sector-loc">
-                              {item.district}, {item.state}
-                            </span>
-                          </div>
-                        </td>
-
-                        {/* 3. Satellite & Sensor */}
-                        <td>
-                          <div className="cell-satellite">
-                            <span className="spacecraft-pill">
-                              <Radio size={11} /> {item.satellite}
-                            </span>
-                            <span className="time-utc">
-                              {formatUTC(item.lastSeen).replace(" UTC", "")} · {item.detections.length} pass(es)
-                            </span>
-                          </div>
-                        </td>
-
-                        {/* 4. Observed FRP (MW) */}
-                        <td>
-                          <div className="cell-frp">
-                            <div className="frp-top">
-                              <Flame size={13} color="#ff9559" />
-                              <strong>{item.peakFrp.toFixed(1)} MW</strong>
-                            </div>
-                            <div className="frp-bar-track">
-                              <div
-                                className="frp-bar-fill"
-                                style={{
-                                  width: `${Math.min(100, (item.peakFrp / 160) * 100)}%`,
-                                  background: item.peakFrp > 120 ? "#ff4444" : "#ff9559",
-                                }}
-                              />
-                            </div>
-                            <span className="delta-t">Mean: {item.meanFrp.toFixed(1)} MW</span>
-                          </div>
-                        </td>
-
-                        {/* 5. Classification */}
-                        <td>
-                          <span
-                            className="source-class-badge"
-                            style={{
-                              borderColor:
-                                item.classification === "Routine Gas Flare"
-                                  ? "#f5a62366"
-                                  : item.classification === "Acute Industrial Fire"
-                                  ? "#ff444466"
-                                  : item.classification === "Agricultural Burning"
-                                  ? "#a8c64066"
-                                  : item.classification === "Wildfire / Natural Fire"
-                                  ? "#ff8c0066"
-                                  : "#3a9fff66",
-                              color:
-                                item.classification === "Routine Gas Flare"
-                                  ? "#f5a623"
-                                  : item.classification === "Acute Industrial Fire"
-                                  ? "#ff4444"
-                                  : item.classification === "Agricultural Burning"
-                                  ? "#a8c640"
-                                  : item.classification === "Wildfire / Natural Fire"
-                                  ? "#ff8c00"
-                                  : "#3a9fff",
-                              backgroundColor: "rgba(255,255,255,0.03)",
-                            }}
-                          >
-                            {item.classification}
-                          </span>
-                        </td>
-
-                        {/* 6. XGBoost Risk Assessment */}
-                        <td>
-                          <div
-                            className="risk-assessment-pill"
-                            style={{
-                              color: rMeta.color,
-                              backgroundColor: rMeta.bg,
-                              borderColor: rMeta.border,
-                            }}
-                          >
-                            <RiskIcon size={13} strokeWidth={2.5} />
-                            <span>{pred.label} Risk</span>
-                          </div>
-                        </td>
-
-                        {/* 7. Confidence */}
-                        <td>
-                          <div className="cell-confidence">
-                            <span className="conf-num">{Math.round(pred.score * 100)}%</span>
-                            <div className="conf-bar">
-                              <div
-                                className="conf-bar-fill"
-                                style={{
-                                  width: `${Math.round(pred.score * 100)}%`,
-                                  backgroundColor: rMeta.color,
-                                }}
-                              />
-                            </div>
-                            <span className="dev-sigma">
-                              dev: {item.baseline.robust_deviation >= 0 ? `+${item.baseline.robust_deviation.toFixed(1)}σ` : `${item.baseline.robust_deviation.toFixed(1)}σ`}
-                            </span>
-                          </div>
-                        </td>
-
-                        {/* 8. Manager Review */}
-                        <td>
-                          <div className="cell-decision">
-                            <span
-                              className={`status-pill ${
-                                isReviewed
-                                  ? item.review?.status === "Flagged for Inspection"
-                                    ? "st-flagged"
-                                    : "st-approved"
-                                  : "st-pending"
-                              }`}
-                            >
-                              {isReviewed ? <CheckCircle2 size={11} /> : <Clock3 size={11} />}
-                              <span>{isReviewed ? item.review.status : "Awaiting Review"}</span>
-                            </span>
-                            {isReviewed && <small className="analyst-tag">by {item.review.analyst || "Duty Officer"}</small>}
-                          </div>
-                        </td>
-
-                        {/* 9. Actions */}
-                        <td style={{ textAlign: "right" }}>
-                          <button
-                            className="btn-inspect-dossier"
-                            onClick={() => setActiveDossier(item)}
-                            title="Inspect complete telemetry evidence"
-                          >
-                            <Eye size={13} />
-                            <span>Inspect Telemetry</span>
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan={9} className="no-records-cell">
-                      <div className="empty-state-box">
-                        <Search size={22} color="rgba(255,255,255,0.2)" />
-                        <p>No thermal observations match your active search and filter criteria.</p>
-                        <button
-                          className="btn-pill active"
-                          onClick={() => {
-                            setSearchQuery("");
-                            setRiskFilter("All");
-                            setClassFilter("All");
-                          }}
-                        >
-                          Reset Filters
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="table-footer-status">
-            <span>
-              Displaying <strong>{filteredRows.length}</strong> of <strong>{enrichedDataset.length}</strong> events for{" "}
-              <strong>{currentArea.name}</strong> · Ingested from live overview feed
-            </span>
-            <span>All FRP values and coordinates match Overview & Queue tables 1:1</span>
-          </div>
-        </div>
+        </section>
       )}
 
-      {/* ── Deep Telemetry Evidence Dossier Modal ──────────────────────────── */}
-      {activeDossier && (
-        <div className="dossier-modal-backdrop" onClick={(e) => e.target === e.currentTarget && setActiveDossier(null)}>
-          <div className="dossier-modal-window">
-            {/* Modal Header */}
-            <div className="dossier-modal-header">
-              <div className="header-left">
-                <div className="badge-group">
-                  <span className="dossier-id">{activeDossier.id.toUpperCase()}</span>
-                  <span
-                    className="risk-tag"
-                    style={{
-                      color: RISK_META[activeDossier.prediction.label]?.color,
-                      backgroundColor: RISK_META[activeDossier.prediction.label]?.bg,
-                      borderColor: RISK_META[activeDossier.prediction.label]?.border,
-                    }}
-                  >
-                    {activeDossier.prediction.label} Risk · {Math.round(activeDossier.prediction.score * 100)}% Confidence
-                  </span>
-                </div>
-                <h3>{activeDossier.facility.name}</h3>
-                <p>
-                  {activeDossier.district}, {activeDossier.state} · Sector: {activeDossier.lat.toFixed(4)}°N,{" "}
-                  {activeDossier.lon.toFixed(4)}°E
-                </p>
+      {report && (
+        <>
+          {(stale || report.provenance.input.mode === "upload") && (
+            <div className="ra-notice ra-warning">
+              <Info size={18} />
+              <div>
+                {stale && (
+                  <p>
+                    NASA refresh failed for part of this run. A dated,
+                    previously retrieved real snapshot was used; check source
+                    timestamps.
+                  </p>
+                )}
+                {report.provenance.input.mode === "upload" && (
+                  <p>
+                    Scoring a user-uploaded CSV. Its provenance is unverified;
+                    the model was trained only on NASA data.
+                  </p>
+                )}
               </div>
-              <button className="btn-close-modal" onClick={() => setActiveDossier(null)}>
-                <X size={18} />
-              </button>
             </div>
-
-            {/* Modal Body */}
-            <div className="dossier-modal-body">
-              {/* Mandatory Assistive Caution Box */}
-              <div className="modal-assist-banner">
-                <AlertTriangle size={16} color="#f5a623" />
-                <span>
-                  <strong>Advisory Decision Notice:</strong> XGBoost anomaly models assist the duty officer by comparing
-                  satellite radiative measurements against historical persistence and median baseline data. Official protocol
-                  requires human sign-off below.
+          )}
+          <div className="ra-summary">
+            {[
+              [
+                "Observations scored",
+                number(report.rows.length),
+                "Individual detections, not incidents",
+              ],
+              [
+                "Unusual excess",
+                number(report.rows.filter((r) => r.unusual).length),
+                "≥95th residual percentile; not hazard probability",
+              ],
+              [
+                "Held-out error · MAE",
+                `${number(model.metrics.maeMw)} MW`,
+                `${model.test.count} observations on ${model.test.day}`,
+              ],
+              [
+                "Actual processing time",
+                duration(report.timings.totalMs),
+                `NASA ${duration(report.timings.nasaFetchMs)} · worker ${duration(report.timings.workerMs)}`,
+              ],
+            ].map(([label, value, caption]) => (
+              <div key={label}>
+                <span>{label}</span>
+                <strong>{value}</strong>
+                <small>{caption}</small>
+              </div>
+            ))}
+          </div>
+          <div className="ra-grid two">
+            <section className="panel padded">
+              <div className="ra-section-title">
+                <span className="eyebrow">MODEL CARD</span>
+                <span className="ra-tag">
+                  {model.library} · {model.trees} trees
                 </span>
               </div>
-
-              {/* 4 Multi-Spectral Evidence Panels */}
-              <div className="dossier-quad-grid">
-                {/* Panel 1: Satellite Radiance & Overpasses */}
-                <div className="evidence-panel">
-                  <div className="panel-header">
-                    <Flame size={15} color="#ff9559" />
-                    <h4>Observed Radiance & Overpasses</h4>
+              <h3>A measured benchmark, not a confidence claim.</h3>
+              <div className="ra-split">
+                {[
+                  [
+                    "TRAIN",
+                    `${model.train.from} → ${model.train.to}`,
+                    model.train.count,
+                  ],
+                  ["CALIBRATE", model.calibration.day, model.calibration.count],
+                  ["TEST", model.test.day, model.test.count],
+                ].map(([label, date, count]) => (
+                  <div key={label}>
+                    <span>{label}</span>
+                    <strong>{number(count)}</strong>
+                    <small>{date}</small>
                   </div>
-                  <div className="stats-table">
-                    <div className="stat-row">
-                      <span>Peak Observed FRP</span>
-                      <strong style={{ color: "#ff9559" }}>{activeDossier.peakFrp.toFixed(1)} MW</strong>
-                    </div>
-                    <div className="stat-row">
-                      <span>Mean Cluster FRP</span>
-                      <strong>{activeDossier.meanFrp.toFixed(1)} MW</strong>
-                    </div>
-                    <div className="stat-row">
-                      <span>Historical Median FRP</span>
-                      <strong>{activeDossier.baseline.median_frp.toFixed(1)} MW</strong>
-                    </div>
-                    <div className="stat-row">
-                      <span>Robust MAD Anomaly Deviation</span>
-                      <strong style={{ color: activeDossier.baseline.robust_deviation >= 7 ? "#ff4444" : "#55d4f5" }}>
-                        {activeDossier.baseline.robust_deviation >= 0 ? `+${activeDossier.baseline.robust_deviation.toFixed(2)}` : activeDossier.baseline.robust_deviation.toFixed(2)} σ
-                      </strong>
-                    </div>
-                    <div className="stat-row">
-                      <span>Historical Persistence Rate</span>
-                      <strong>{Math.round(activeDossier.baseline.persistence_rate * 100)}% of days</strong>
-                    </div>
-                    <div className="stat-row">
-                      <span>Overpass Detections Count</span>
-                      <strong>{activeDossier.detections.length} recorded passes</strong>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Panel 2: Multi-Pass Breakdown (Matches exact 67MW, 54MW, 41MW etc.) */}
-                <div className="evidence-panel">
-                  <div className="panel-header">
-                    <Radio size={15} color="#55d4f5" />
-                    <h4>Individual Overpass Detections</h4>
-                  </div>
-                  <div className="stats-table">
-                    {activeDossier.detections && activeDossier.detections.length > 0 ? (
-                      activeDossier.detections.map((det, idx) => (
-                        <div key={det.id || idx} className="stat-row">
-                          <span>
-                            Pass #{idx + 1} ({det.acquiredAt ? formatUTC(det.acquiredAt).replace(" UTC", "") : "Observed"})
-                          </span>
-                          <strong style={{ color: det.frp === activeDossier.peakFrp ? "#ff9559" : "#fff" }}>
-                            {det.frp != null ? Number(det.frp).toFixed(1) : activeDossier.peakFrp} MW {det.daynight ? `(${det.daynight})` : ""}
-                          </strong>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="stat-row">
-                        <span>Single Detection Overpass</span>
-                        <strong>{activeDossier.peakFrp.toFixed(1)} MW</strong>
-                      </div>
-                    )}
-                    <div className="stat-row" style={{ marginTop: 8, paddingTop: 6, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-                      <span>Sensor Confidence Level</span>
-                      <strong style={{ textTransform: "uppercase" }}>{activeDossier.confidence}</strong>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Panel 3: Land Cover & Atmospheric Context */}
-                <div className="evidence-panel">
-                  <div className="panel-header">
-                    <Wind size={15} color="#c5f277" />
-                    <h4>Land Cover & Meteorological Dispersion</h4>
-                  </div>
-                  <div className="stats-table">
-                    <div className="stat-row">
-                      <span>Built-Up / Industrial %</span>
-                      <strong>{activeDossier.landCover.built_up}%</strong>
-                    </div>
-                    <div className="stat-row">
-                      <span>Cropland / Agricultural %</span>
-                      <strong>{activeDossier.landCover.cropland}%</strong>
-                    </div>
-                    <div className="stat-row">
-                      <span>Tree & Shrub Cover %</span>
-                      <strong>{activeDossier.landCover.tree_cover}%</strong>
-                    </div>
-                    <div className="stat-row">
-                      <span>Surface Wind Velocity</span>
-                      <strong>{activeDossier.weather.wind_speed_ms} m/s ({activeDossier.weather.wind_direction_deg}°)</strong>
-                    </div>
-                    <div className="stat-row">
-                      <span>Ambient Air Temperature</span>
-                      <strong>{activeDossier.weather.temperature_c} °C</strong>
-                    </div>
-                    <div className="stat-row">
-                      <span>Relative Humidity</span>
-                      <strong>{activeDossier.weather.humidity_pct}%</strong>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Panel 4: XGBoost Softmax & Rationale */}
-                <div className="evidence-panel">
-                  <div className="panel-header">
-                    <BrainCircuit size={15} color="#55d4f5" />
-                    <h4>XGBoost Softmax Distribution</h4>
-                  </div>
-                  <div className="prob-bars-stack">
-                    {["Critical", "High", "Moderate", "Low"].map((clsName) => {
-                      const idxMap = { Low: 0, Moderate: 1, High: 2, Critical: 3 };
-                      const prob = activeDossier.prediction.probabilities[idxMap[clsName]] || 0;
-                      const pMeta = RISK_META[clsName];
-                      return (
-                        <div key={clsName} className="prob-item">
-                          <div className="prob-label-row">
-                            <span style={{ color: pMeta.color }}>{clsName} Risk</span>
-                            <span className="mono-prob">{Math.round(prob * 100)}%</span>
-                          </div>
-                          <div className="prob-bar-base">
-                            <div
-                              className="prob-bar-accent"
-                              style={{ width: `${Math.round(prob * 100)}%`, backgroundColor: pMeta.color }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div className="model-recommendation-box">
-                    <strong>Model Decision Rationale:</strong>
-                    <p>
-                      {activeDossier.prediction.label === "Critical"
-                        ? "Acute heat anomaly exceeding 7.5σ with low historical persistence. Urgent ground verification required."
-                        : activeDossier.prediction.label === "High"
-                        ? "Elevated radiative output above standard operational limits. Recommend facility schedule corroboration."
-                        : activeDossier.prediction.label === "Moderate"
-                        ? "Signal aligns with monitored flaring or standard harvest burning. Baseline persistence indicates expected activity."
-                        : "Continuous process heat operating comfortably within historical baseline envelope. Standard routine logging."}
-                    </p>
-                  </div>
-                </div>
+                ))}
               </div>
-
-              {/* ── Human Approval & Formal Sign-Off Section ───────────────── */}
-              <div className="modal-decision-form">
-                <div className="form-heading">
-                  <ShieldCheck size={18} color="#22c55e" />
-                  <h4>Duty Officer Formal Determination</h4>
+              <dl className="ra-values">
+                <div>
+                  <dt>Model mean absolute error</dt>
+                  <dd>{number(model.metrics.maeMw)} MW</dd>
                 </div>
-
-                <div className="form-body">
-                  <div className="decision-buttons-row">
-                    {[
-                      { status: "Approved / Normal", label: "Approve as Normal / Routine", color: "#22c55e" },
-                      { status: "Flagged for Inspection", label: "Flag for Field Inspection", color: "#ff9559" },
-                      { status: "Resolved", label: "Mark Resolved / Closed", color: "#3a9fff" },
-                    ].map((btn) => (
-                      <button
-                        key={btn.status}
-                        className={`btn-action-choice ${activeDossier.review?.status === btn.status ? "selected" : ""}`}
-                        style={{
-                          borderColor: activeDossier.review?.status === btn.status ? btn.color : "rgba(255,255,255,0.1)",
-                          color: activeDossier.review?.status === btn.status ? btn.color : "rgba(255,255,255,0.7)",
-                          background:
-                            activeDossier.review?.status === btn.status ? `${btn.color}18` : "rgba(255,255,255,0.03)",
-                        }}
-                        onClick={() => {
-                          handleSaveDecision(activeDossier.id, btn.status, `Verified ${btn.label} by analyst.`);
-                        }}
-                      >
-                        <CheckCircle2 size={14} />
-                        <span>{btn.label}</span>
-                      </button>
-                    ))}
-                  </div>
+                <div>
+                  <dt>Training-median baseline error</dt>
+                  <dd>{number(model.medianBaseline.maeMw)} MW</dd>
                 </div>
+                <div>
+                  <dt>Model root mean square error</dt>
+                  <dd>{number(model.metrics.rmseMw)} MW</dd>
+                </div>
+              </dl>
+              <p className={model.beatsMedianMae ? "ra-positive" : "ra-amber"}>
+                {model.beatsMedianMae
+                  ? "Lower error than the median baseline on this held-out day."
+                  : "Did not beat the median baseline on this held-out day. Treat the model as experimental."}
+              </p>
+              <p className="ra-caption">
+                Fixed settings; final UTC day is excluded from training and
+                calibration and may be incomplete. This is a temporal test, not
+                independent incident validation.
+              </p>
+            </section>
+            <section className="panel padded">
+              <span className="eyebrow">OBSERVED × MODELED</span>
+              <h3>Where does the signal diverge?</h3>
+              <Scatter rows={report.rows} />
+            </section>
+          </div>
+          <section className="panel padded ra-evidence">
+            <div className="ra-section-title">
+              <div>
+                <span className="eyebrow">DETECTION-LEVEL EVIDENCE</span>
+                <h3>Inspect the observations behind each score.</h3>
+              </div>
+              <div className="ra-actions">
+                <button
+                  className="secondary"
+                  onClick={() => exportReport(report, "csv")}
+                >
+                  <Download size={15} />
+                  Analysis CSV
+                </button>
+                <button
+                  className="secondary"
+                  onClick={() => exportReport(report, "json")}
+                >
+                  <Download size={15} />
+                  Full report JSON
+                </button>
               </div>
             </div>
+            <div className="ra-table-controls">
+              <label>
+                <Search size={15} />
+                <input
+                  aria-label="Search analysis observations"
+                  placeholder="Search coordinates, UTC date or ID"
+                  value={search}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    setPage(0);
+                  }}
+                />
+              </label>
+              <select
+                aria-label="Analysis evidence filter"
+                value={filter}
+                onChange={(e) => {
+                  setFilter(e.target.value);
+                  setPage(0);
+                }}
+              >
+                <option value="all">All observations</option>
+                <option value="unusual">Unusual excess only</option>
+                <option value="held-out">Held-out day only</option>
+                <option value="limited">Outside training range</option>
+              </select>
+            </div>
+            <p className="ra-caption">
+              FRP is fire radiative power, not air temperature. The residual
+              percentile is an empirical rank, not a probability. Earlier-period
+              scores are not held-out validation.
+            </p>
+            <div className="ra-table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Observation / UTC</th>
+                    <th>
+                      Observed
+                      <br />
+                      MW
+                    </th>
+                    <th>
+                      Modeled
+                      <br />
+                      MW
+                    </th>
+                    <th>
+                      Residual
+                      <br />
+                      percentile
+                    </th>
+                    <th>
+                      Earlier nearby
+                      <br />
+                      history
+                    </th>
+                    <th>
+                      Evaluation
+                      <br />
+                      membership
+                    </th>
+                    <th>Inspect</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.id}>
+                      <td>
+                        <strong>
+                          {r.lat.toFixed(4)}, {r.lon.toFixed(4)}
+                        </strong>
+                        <small>{formatUTC(r.acquiredAt)}</small>
+                        <small>{r.confidence} sensor confidence</small>
+                      </td>
+                      <td>{number(r.observedFrp)}</td>
+                      <td>{number(r.expectedFrp)}</td>
+                      <td>
+                        <span className={`ra-tag ${r.unusual ? "amber" : ""}`}>
+                          {number(r.residualPercentile, 1)}th
+                        </span>
+                        <small>
+                          {r.unusual
+                            ? "Unusual excess"
+                            : "No high residual flag"}
+                        </small>
+                      </td>
+                      <td>
+                        {number(r.baseline.priorDetections)} detections
+                        <small>
+                          {r.baseline.observedDays} observed days · 5 km
+                        </small>
+                        <small>Median {number(r.baseline.medianFrp)} MW</small>
+                      </td>
+                      <td>
+                        {r.split}
+                        <small className={r.flags.length ? "ra-amber" : ""}>
+                          {r.flags.length
+                            ? `${r.flags.length} quality / range warnings`
+                            : "Within feature ranges"}
+                        </small>
+                      </td>
+                      <td>
+                        <button
+                          className="secondary"
+                          onClick={() => setDetail(r)}
+                        >
+                          Inputs
+                        </button>
+                        {r.eventId && (
+                          <button
+                            className="text-button"
+                            onClick={() => setEvidence(r.eventId)}
+                          >
+                            Review evidence
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!rows.length && (
+                <p className="ra-empty">No observations match this filter.</p>
+              )}
+            </div>
+            <div className="ra-pagination">
+              <span>
+                {number(filtered.length)} matching observations · page{" "}
+                {page + 1} of {Math.max(1, Math.ceil(filtered.length / 25))}
+              </span>
+              <div>
+                <button
+                  className="secondary"
+                  disabled={page === 0}
+                  onClick={() => setPage((p) => p - 1)}
+                >
+                  Previous
+                </button>
+                <button
+                  className="secondary"
+                  disabled={(page + 1) * 25 >= filtered.length}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </section>
+          {detail && (
+            <section
+              id="analysis-input-detail"
+              className="panel padded ra-detail"
+              aria-label="Selected observation inputs"
+            >
+              <div className="ra-section-title">
+                <div>
+                  <span className="eyebrow">MEASUREMENTS / {detail.id}</span>
+                  <h3>Actual inputs, not regional assumptions.</h3>
+                </div>
+                <button className="secondary" onClick={() => setDetail(null)}>
+                  Close inputs
+                </button>
+              </div>
+              <div className="ra-grid two">
+                <dl className="ra-values">
+                  {Object.entries(detail.features).map(([key, value]) => (
+                    <div key={key}>
+                      <dt>{featureNames[key]}</dt>
+                      <dd>{number(value, 4)}</dd>
+                    </div>
+                  ))}
+                </dl>
+                <div>
+                  <h4>Largest model contributions</h4>
+                  {detail.contributions.map((c) => (
+                    <p key={c.feature}>
+                      {featureNames[c.feature]}{" "}
+                      <strong>
+                        {c.logContribution >= 0 ? "+" : ""}
+                        {number(c.logContribution, 3)}
+                      </strong>
+                    </p>
+                  ))}
+                  <p className="ra-caption">
+                    Exact tree contributions to the predicted log(1 + FRP), not
+                    causal explanations or risk percentages.
+                  </p>
+                  <p>
+                    Earlier nearby median: {number(detail.baseline.medianFrp)}{" "}
+                    MW. Median absolute deviation:{" "}
+                    {number(detail.baseline.madFrp)} MW. At least three prior
+                    detections required.
+                  </p>
+                  {detail.flags.map((flag) => (
+                    <p className="ra-amber" key={flag}>
+                      {flag}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            </section>
+          )}
+          <div className="ra-grid two">
+            <section className="panel padded">
+              <span className="eyebrow">FEATURE IMPORTANCE</span>
+              <h3>What this model used.</h3>
+              {model.importance.map((item) => (
+                <div className="ra-importance" key={item.feature}>
+                  <span>{featureNames[item.feature]}</span>
+                  <meter
+                    min="0"
+                    max="1"
+                    value={item.gainShare}
+                    aria-label={`${featureNames[item.feature]} training gain share`}
+                  />
+                  <strong>{number(item.gainShare * 100, 1)}%</strong>
+                </div>
+              ))}
+              <p className="ra-caption">
+                Normalized training gain, not causal importance. Observed FRP is
+                the target and is never an input feature.
+              </p>
+            </section>
+            <section className="panel padded">
+              <span className="eyebrow">SOURCE & QUALITY</span>
+              <h3>Trace this run back to its data.</h3>
+              {Object.entries(report.provenance).map(([key, meta]) => (
+                <div className="ra-source" key={key}>
+                  <strong>
+                    {key === "training" ? "Training snapshot" : "Scoring input"}{" "}
+                    · {meta.provider}
+                  </strong>
+                  <p>
+                    {formatUTC(meta.fetchedAt)} ·{" "}
+                    {meta.stale
+                      ? "STALE SNAPSHOT"
+                      : meta.cached
+                        ? "Cached real snapshot"
+                        : meta.mode === "upload"
+                          ? "Unverified upload"
+                          : "Fetched from NASA"}
+                  </p>
+                  <p>
+                    Rejected rows: {meta.rejectedRows ?? 0} · duplicates
+                    removed: {meta.duplicates ?? 0}
+                  </p>
+                  {meta.sourceUrl && (
+                    <a href={meta.sourceUrl} target="_blank" rel="noreferrer">
+                      Open exact NASA source ↗
+                    </a>
+                  )}
+                </div>
+              ))}
+              <p>
+                Incomplete/out-of-bounds model inputs excluded:{" "}
+                {report.quality.excludedScoringRows} scoring /{" "}
+                {model.excludedTrainingRows} training rows.
+              </p>
+              <small className="ra-run-id">Run {report.runId}</small>
+            </section>
           </div>
-        </div>
+          <details className="panel padded ra-method">
+            <summary>Methodology, operating limits and reproducibility</summary>
+            <p>
+              {model.version} · Trained {formatUTC(model.trainedAt)}. The model
+              fits log(1 + FRP) with nine measured features. Residual = log(1 +
+              observed FRP) − predicted log FRP. Its rank is compared with the
+              calibration day's residuals. A positive residual at or above the
+              95th percentile is flagged for investigation only.
+            </p>
+            <ul>
+              {report.limitations.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+            <p>
+              Source classification remains Uncertain / Other until a human
+              review. No weather, facility overlap, land-cover percentages,
+              30-day or annual history are fabricated. Nearby history covers
+              strictly earlier UTC days in the downloaded seven-day window.
+            </p>
+            <p>
+              Model artifact and report are retained in the local backend. The
+              full JSON export includes input features, timestamps, metrics and
+              a training-data digest. Changing input CSV does not change the
+              NASA training dataset.
+            </p>
+            <a
+              href="https://firms.modaps.eosdis.nasa.gov/active_fire/"
+              target="_blank"
+              rel="noreferrer"
+            >
+              NASA FIRMS documentation ↗
+            </a>
+          </details>
+        </>
+      )}
+      {selectedEvent && (
+        <EvidenceDrawer
+          key={selectedEvent.id}
+          event={selectedEvent}
+          meta={report.provenance.input}
+          onClose={() => setEvidence(null)}
+          onSaved={(id, decision) => {
+            setReport((r) => ({
+              ...r,
+              events: r.events.map((e) =>
+                e.id === id ? { ...e, review: decision } : e,
+              ),
+            }));
+            onSavedReview(id, decision);
+          }}
+        />
       )}
     </div>
   );

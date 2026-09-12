@@ -1,5 +1,29 @@
 # TODO
 
+## Active phase 10 (12 September 2026)
+
+Actual workspace: `D:/Y-More/AI_Playground/Web/ThermalGuard`. Newer checkout HEAD at intake: 3c22ce6; origin is sankirtansyadavofficial-Hack/ThermalGuard. Preserve this checkout and user history; do not use older task paths/remotes. User confirmed no labeled dataset; implement real-observation scoring, not cause classification.
+
+| Step | Status | Task |
+| --- | --- | --- |
+| 10.1 | done | Grounded newer checkout, documented scope; isolated Python 3.12.14 / XGBoost 3.1.3 installed; npm ci clean. NASA NOAA-20 seven-day feed HTTP 200. |
+| 10.2 | done | XGBoost 3.1.3 real model/artifact, temporal holdout, calibration ranking and measured nearby history; four Python tests pass including target leakage boundary. |
+| 10.3 | done | Bounded jobs, real NASA fetch, SQLite runs, worker timeout/limits and measured timings; ten Node tests pass. |
+| 10.4 | done | Replaced simulated analyser; backend stages, model card, chart, scrollable evidence, CSV/JSON, inputs and real review drawer. Desktop/mobile and CSV workflow pass. |
+| 10.5 | done | Eleven Node + five Python tests; lint, normal/Pages builds; production analysis/CSV/review/export/mobile smoke, Earth/district and landing guide checks pass. All three NASA sources fetched and modeled. |
+| 10.6 | done | Pinned setup/run/test instructions, API/model limits, measured three-sensor validation and local deployment handoff documented. |
+
+### Phase 10 measured verification (12 September 2026 UTC)
+
+- Full-stack production now runs locally at `http://127.0.0.1:4173`; `npm start` restarts it. `dist/` is the normal full-stack build, not Pages. Python model dependencies installed in ignored `.venv/`.
+- Live 24h India rectangular extent: NOAA20 577 detections / 511 events, NOAA21 380 / 288, SNPP 452 / 369. No stale fallback used. Counts are retrieval-specific and not permanent statistics.
+- Real XGBoost: NOAA20 3,319 train / 487 calibration / 267 held-out rows; held-out MAE 2.03 MW vs 2.92 MW median baseline; 577 scored. NOAA21 2,978 / 468 / 146, MAE 2.22 vs 4.56 MW; 380 scored. SNPP 3,166 / 414 / 225, MAE 2.11 vs 3.48 MW; 452 scored. These are exploratory same-observation FRP regression errors, not incident accuracy or future performance guarantees. Final test day may be partial.
+- Last all-sensor jobs: NOAA21 `5c41e17b-7915-4a5e-9651-457860c37746`; SNPP `8b3a1d64-17ec-4df1-b130-12c2cc2e7a90`. Real processing ranged about 1–4 seconds in these checks; cached retrieval is faster. No artificial latency.
+- Verified CSV scoring without training contamination, missing fields/runtime, malformed upload, body/auth/origin limits, concurrency rejection, source outages/stale provenance, temporal target leakage boundary, history excluding same/future days, responsive UI and no browser JS errors. Exact normalized training snapshots and models retained with new runs.
+- Restored Street map default per the user's earlier preference. Existing Earth, district demo and workflows remain. Pages builds still explicitly disable real model analysis and were not published. No commits, push, credential or hosted deployment changes in phase 10.
+- Removed only the single QA-created live review ID 1 (test name/note/time matched exactly), after backing it up to `.build/qa-review-backup.json`. Updated Earth test to use replay for future test decisions. Real observations were not deleted. Old reports generated before cleanup can contain that test review snapshot; they are QA artifacts, not operational decisions.
+- UI QA images are under `.build/real-analysis-*`. Vite still gives the pre-existing non-failing Earth chunk size advisory; lint is clean.
+
 | Step | Status | Task                                                                                                                                                                                                                  |
 | ---- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1.1  | done   | Inspect project, verify NASA source, document product and contracts.                                                                                                                                                  |

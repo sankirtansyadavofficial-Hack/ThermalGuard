@@ -128,8 +128,14 @@ export function normalize(rows, source) {
     }
     seen.add(id);
     const confidence =
-      { h: "high", n: "nominal", l: "low" }[r.confidence?.toLowerCase()] ||
-      "unknown";
+      {
+        h: "high",
+        n: "nominal",
+        l: "low",
+        high: "high",
+        nominal: "nominal",
+        low: "low",
+      }[r.confidence?.toLowerCase()] || "unknown";
     const nullable = (v) =>
       v !== "" && Number.isFinite(Number(v)) ? Number(v) : null;
     detections.push({
@@ -143,6 +149,7 @@ export function normalize(rows, source) {
       sensor: "VIIRS",
       source,
       brightness: nullable(r.bright_ti4),
+      brightnessI5: nullable(r.bright_ti5),
       scan: nullable(r.scan),
       track: nullable(r.track),
       daynight: r.daynight,

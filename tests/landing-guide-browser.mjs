@@ -93,7 +93,7 @@ try {
     "Interactive demo · synthetic replay",
     "Documentation toggle cannot enable live mode",
   );
-  await page.locator(".api-routes summary").nth(1).click();
+  await page.locator(".api-routes summary").filter({ hasText: "Load thermal evidence" }).click();
   assert.match(
     await page.locator(".api-routes details[open]").innerText(),
     /bbox=68,6,98,37/,

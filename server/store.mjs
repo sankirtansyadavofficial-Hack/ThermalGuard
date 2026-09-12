@@ -11,9 +11,23 @@ export function createStore(path) {
     CREATE TABLE IF NOT EXISTS event_records(id TEXT PRIMARY KEY,payload TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS reviews(id INTEGER PRIMARY KEY,event_id TEXT NOT NULL,status TEXT NOT NULL,classification TEXT NOT NULL,note TEXT NOT NULL,analyst TEXT NOT NULL,created_at TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS reviews_event ON reviews(event_id,id);
-    CREATE TABLE IF NOT EXISTS areas(id TEXT PRIMARY KEY,name TEXT NOT NULL,bbox TEXT NOT NULL,created_at TEXT NOT NULL);`);
+    CREATE TABLE IF NOT EXISTS areas(id TEXT PRIMARY KEY,name TEXT NOT NULL,bbox TEXT NOT NULL,created_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS analysis_runs(id TEXT PRIMARY KEY,payload TEXT NOT NULL,created_at TEXT NOT NULL);`);
   return {
     db,
+    saveRun(run) {
+      db.prepare("INSERT OR REPLACE INTO analysis_runs VALUES(?,?,?)").run(
+        run.id,
+        JSON.stringify(run),
+        run.startedAt,
+      );
+    },
+    run(id) {
+      const row = db
+        .prepare("SELECT payload FROM analysis_runs WHERE id=?")
+        .get(id);
+      return row ? JSON.parse(row.payload) : null;
+    },
     snapshot(key) {
       const r = db.prepare("SELECT * FROM snapshots WHERE key=?").get(key);
       return r ? { ...JSON.parse(r.payload), savedAt: r.saved_at } : null;

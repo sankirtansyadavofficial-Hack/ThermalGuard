@@ -1,271 +1,164 @@
-﻿#!/usr/bin/env python3
+"""Real NASA-observation regression via JSON stdin/stdout; never trains on score input.
+Same-observation FRP consistency screening, NOT a cause classifier or forecast.
 """
-ThermalGuard Smart Analyser — XGBoost Companion Script
-=======================================================
-Standalone Python script that trains a real XGBoost gradient-boosted
-classifier on the ThermalGuard hotspot dataset (hotspots_data.csv).
-
-Usage:
-    pip install xgboost pandas numpy scikit-learn
-    python xgboost_analyser.py [path_to_csv]
-
-If no CSV is provided it reads hotspots_data.csv from the same directory.
-An additional CSV exported from the ThermalGuard website can also be provided.
-
-Output:
-    - Feature importance table
-    - Risk classification report
-    - Per-hotspot predictions with confidence scores
-    - District-level aggregate risk summary
-"""
-
+import hashlib
+import json
+import math
 import sys
-import os
-import warnings
-warnings.filterwarnings("ignore")
+import time
+from collections import defaultdict
+from datetime import datetime, timezone
+from pathlib import Path
+import numpy as np
+import xgboost as xgb
 
-try:
-    import numpy as np
-    import pandas as pd
-    from xgboost import XGBClassifier
-    from sklearn.preprocessing import LabelEncoder
-    from sklearn.model_selection import StratifiedKFold, cross_val_score
-    from sklearn.metrics import classification_report, confusion_matrix
-except ImportError as e:
-    print(f"[ERROR] Missing dependency: {e}")
-    print("Install with:  pip install xgboost pandas numpy scikit-learn")
-    sys.exit(1)
+VERSION = "frp-consistency-1.0.0"
+FEATURES = ["I4_K", "I5_K", "scan_km", "track_km", "latitude", "longitude",
+            "UTC_hour_sin", "UTC_hour_cos", "daylight"]
 
-# ── Configuration ─────────────────────────────────────────────────────────────
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_CSV = os.path.join(SCRIPT_DIR, "hotspots_data.csv")
 
-FEATURE_COLS = [
-    "frp", "bright_ti4", "delta_t", "robust_deviation",
-    "persistence_rate", "days_seen_30d", "built_up", "tree_cover",
-    "cropland", "wind_speed_ms", "humidity_pct", "temperature_c",
-    "detection_count", "spatial_spread_km2", "centroid_drift_rate",
-    "facility_overlap",
-]
+def vector(row):
+    """No observed FRP or FRP-derived feature is allowed here."""
+    bounds = {"brightness": (150, 500), "brightnessI5": (150, 500),
+              "scan": (0.01, 5), "track": (0.01, 5),
+              "lat": (-90, 90), "lon": (-180, 180)}
+    for key, (lo, hi) in bounds.items():
+        value = row.get(key)
+        if not isinstance(value, (float, int)) or not math.isfinite(value) or not lo <= value <= hi:
+            return None
+    if row.get("daynight") not in ("D", "N"):
+        return None
+    stamp = datetime.fromisoformat(row["acquiredAt"].replace("Z", "+00:00"))
+    angle = (stamp.hour + stamp.minute / 60) / 24 * math.tau
+    return [row[k] for k in bounds] + [math.sin(angle), math.cos(angle), int(row["daynight"] == "D")]
 
-# Risk label mapping from hotspot class
-CLASS_TO_RISK = {
-    "Acute Industrial Fire":    "Critical",
-    "Wildfire / Natural Fire":  "High",
-    "Agricultural Burning":     "Moderate",
-    "Routine Gas Flare":        "Moderate",
-    "Persistent Industrial Heat": "Low",
-    "Uncertain / Other":        "Moderate",
-}
 
-RISK_ORDER = ["Low", "Moderate", "High", "Critical"]
+def distance(a, b):
+    lat1, lat2 = math.radians(a["lat"]), math.radians(b["lat"])
+    dlat, dlon = lat2 - lat1, math.radians(b["lon"] - a["lon"])
+    v = math.sin(dlat / 2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin(dlon / 2)**2
+    return 12742 * math.asin(min(1, math.sqrt(v)))
 
-DIVIDER = "=" * 72
 
-def load_data(csv_path: str) -> pd.DataFrame:
-    df = pd.read_csv(csv_path)
-    print(f"[INFO] Loaded {len(df)} records from {os.path.basename(csv_path)}")
-    print(f"       Columns: {list(df.columns)}\n")
-    return df
+def history_index(rows):
+    index = defaultdict(list)
+    for row in rows:
+        index[(math.floor(row["lat"] * 20), math.floor(row["lon"] * 20))].append(row)
+    return index
 
-def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
 
-    # Confidence flag: h=high, n=nominal, else=low
-    if "confidence" in df.columns:
-        df["conf_h"] = (df["confidence"].astype(str).str.lower() == "h").astype(int)
-        df["conf_n"] = (df["confidence"].astype(str).str.lower().isin(["n","nominal"])).astype(int)
-    else:
-        df["conf_h"] = 0
-        df["conf_n"] = 0
+def prior_history(row, index):
+    day = row["acquiredAt"][:10]
+    stamp = datetime.fromisoformat(day).replace(tzinfo=timezone.utc).timestamp()
+    x, y = math.floor(row["lat"] * 20), math.floor(row["lon"] * 20)
+    nearby = [p for i in range(x-2, x+3) for j in range(y-2, y+3)
+              for p in index.get((i, j), []) if p["acquiredAt"][:10] < day
+              and stamp - datetime.fromisoformat(p["acquiredAt"].replace("Z", "+00:00")).timestamp() <= 7*86400
+              and distance(p, row) <= 5]
+    days = sorted({p["acquiredAt"][:10] for p in nearby})
+    values = [p["frp"] for p in nearby]
+    median = float(np.median(values)) if len(values) >= 3 else None
+    mad = float(np.median(np.abs(np.array(values)-median))) if median is not None else None
+    return {"radiusKm": 5, "priorDetections": len(values), "observedDays": len(days),
+            "firstDay": days[0] if days else None, "lastDay": days[-1] if days else None,
+            "medianFrp": median, "madFrp": mad,
+            "observedToMedian": row["frp"]/median if median and median > 0 else None}
 
-    # FRP ratio to median
-    if "median_frp" in df.columns:
-        df["frp_ratio"] = df["frp"] / df["median_frp"].replace(0, 1)
-    else:
-        df["frp_ratio"] = 1.0
 
-    # Derived: robust deviation from FRP + median if not present
-    if "robust_deviation" not in df.columns and "median_frp" in df.columns and "mad_frp" in df.columns:
-        df["robust_deviation"] = (df["frp"] - df["median_frp"]) / df["mad_frp"].replace(0, 1)
+def metrics(actual, predicted):
+    return {"maeMw": float(np.mean(np.abs(actual-predicted))),
+            "rmseMw": float(np.sqrt(np.mean((actual-predicted)**2)))}
 
-    # Fill missing numeric columns with sensible defaults
-    defaults = {
-        "bright_ti4": 320, "delta_t": 20, "robust_deviation": 0,
-        "persistence_rate": 0.5, "days_seen_30d": 15, "built_up": 30,
-        "tree_cover": 10, "cropland": 15, "wind_speed_ms": 3,
-        "humidity_pct": 65, "temperature_c": 28, "detection_count": 5,
-        "spatial_spread_km2": 0.3, "centroid_drift_rate": 0, "facility_overlap": 0,
-    }
-    for col, val in defaults.items():
-        if col not in df.columns:
-            df[col] = val
-        else:
-            df[col] = df[col].fillna(val)
 
-    return df
+def analyse(payload):
+    start = time.perf_counter()
+    raw = payload["training"]
+    if len(raw) > 50000 or len(payload["scoring"]) > 15000:
+        raise ValueError("Dataset exceeds the prototype's bounded processing limit.")
+    rows = sorted([r for r in raw if vector(r) is not None], key=lambda r: r["acquiredAt"])
+    days = sorted({r["acquiredAt"][:10] for r in rows})
+    if len(days) < 4:
+        raise ValueError("Need at least four observed UTC days for independent temporal evaluation.")
+    train = [r for r in rows if r["acquiredAt"][:10] < days[-2]]
+    cal = [r for r in rows if r["acquiredAt"][:10] == days[-2]]
+    test = [r for r in rows if r["acquiredAt"][:10] == days[-1]]
+    if len(train) < 100 or min(len(cal), len(test)) < 20:
+        raise ValueError("Insufficient measured data: need 100 training and 20 calibration/test observations each. Try another sensor.")
+    def matrix(points):
+        return xgb.DMatrix(np.asarray([vector(r) for r in points], dtype=np.float32), feature_names=FEATURES)
+    training = matrix(train)
+    training.set_label(np.log1p([r["frp"] for r in train]))
+    model = xgb.train({"objective": "reg:squarederror", "tree_method": "hist", "max_depth": 4,
+                       "eta": 0.06, "subsample": 0.9, "colsample_bytree": 0.9,
+                       "seed": 42, "nthread": 2}, training, num_boost_round=140)
+    fit_ms = round((time.perf_counter()-start)*1000)
+    cal_residuals = np.sort(np.log1p([r["frp"] for r in cal])-model.predict(matrix(cal)))
+    test_prediction = np.maximum(0, np.expm1(model.predict(matrix(test))))
+    actual = np.array([r["frp"] for r in test])
+    median = float(np.median([r["frp"] for r in train]))
+    evaluation = metrics(actual, test_prediction)
+    baseline_metrics = metrics(actual, np.full(len(test), median))
+    gains = model.get_score(importance_type="gain")
+    total_gain = sum(gains.values()) or 1
+    feature_importance = sorted([{"feature": k, "gainShare": gains.get(k, 0)/total_gain} for k in FEATURES], key=lambda a: -a["gainShare"])
+    score = [r for r in payload["scoring"] if vector(r) is not None]
+    if not score:
+        raise ValueError("No scorable observations. Require measured I4/I5 brightness, scan, track and D/N flag in addition to FIRMS coordinates, date/time and FRP.")
+    dm = matrix(score)
+    expected_log = model.predict(dm)
+    contributions = model.predict(dm, pred_contribs=True)
+    train_values = np.array([vector(r) for r in train])
+    lower, upper = train_values.min(axis=0), train_values.max(axis=0)
+    index = history_index(raw)
+    results = []
+    for row, predicted, effect in zip(score, expected_log, contributions):
+        features = vector(row)
+        flags = [FEATURES[i] + " outside training range" for i, value in enumerate(features) if value < lower[i] or value > upper[i]]
+        observed, expected = row["frp"], max(0, float(np.expm1(predicted)))
+        residual = math.log1p(observed)-float(predicted)
+        percentile = float(np.searchsorted(cal_residuals, residual, side="right")/len(cal)*100)
+        day = row["acquiredAt"][:10]
+        split = "training period" if day < days[-2] else "calibration day" if day == days[-2] else "held-out day" if day == days[-1] else "after evaluation window"
+        if day < days[0]:
+            flags.append("Acquisition predates training window")
+        if split == "after evaluation window":
+            flags.append("Acquisition after evaluation window; temporal generalization unverified")
+        top = sorted(zip(FEATURES, effect[:-1]), key=lambda p: -abs(float(p[1])))[:3]
+        results.append({"id": row["id"], "eventId": row.get("eventId"), "lat": row["lat"], "lon": row["lon"],
+                        "acquiredAt": row["acquiredAt"], "source": row["source"], "confidence": row["confidence"],
+                        "observedFrp": observed, "expectedFrp": expected, "excessMw": observed-expected,
+                        "residualPercentile": percentile, "unusual": percentile >= 95 and observed > expected,
+                        "split": split, "flags": flags, "baseline": prior_history(row, index),
+                        "features": dict(zip(FEATURES, features)),
+                        "contributions": [{"feature": k, "logContribution": float(v)} for k, v in top]})
+    artifact = Path(payload["modelPath"])
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    model.save_model(artifact)
+    # Preserve the exact normalized NASA snapshot so the digest is auditable.
+    artifact.with_name("training.json").write_text(json.dumps(rows, sort_keys=True, allow_nan=False), encoding="utf-8")
+    digest = hashlib.sha256(json.dumps(rows, sort_keys=True).encode()).hexdigest()
+    return {"model": {"version": VERSION, "library": "XGBoost " + xgb.__version__, "target": "log(1 + observed FRP MW)",
+                      "trainedAt": datetime.now(timezone.utc).isoformat(), "trainingDigest": digest,
+                      "train": {"from": days[0], "to": days[-3], "count": len(train)},
+                      "calibration": {"day": days[-2], "count": len(cal)}, "test": {"day": days[-1], "count": len(test)},
+                      "metrics": evaluation, "medianBaseline": {"frpMw": median, **baseline_metrics},
+                      "beatsMedianMae": evaluation["maeMw"] < baseline_metrics["maeMw"],
+                      "importance": feature_importance, "features": FEATURES, "trees": 140,
+                      "excludedTrainingRows": len(raw)-len(rows)},
+            "rows": sorted(results, key=lambda r: -r["residualPercentile"]),
+            "quality": {"scored": len(score), "excludedScoringRows": len(payload["scoring"])-len(score)},
+            "timings": {"fitMs": fit_ms, "pythonTotalMs": round((time.perf_counter()-start)*1000)},
+            "limitations": ["Same-observation FRP estimate, not a forecast or fire-cause/risk probability.",
+                            "Radiometry and FRP are physically related; residuals may reflect sensor effects or model error.",
+                            "Temporal holdout only; no independent spatial or incident-ground-truth validation.",
+                            "Residual percentile ranks calibration-day errors; 95th percentile is an exploratory threshold.",
+                            "Seven-day, positive-detection-only history is not a long-term facility baseline or persistence probability.",
+                            "Clouds, overpasses and resolution can hide activity. No detection does not establish safety."]}
 
-def build_risk_label(df: pd.DataFrame) -> pd.Series:
-    """Derive risk label from hotspot class column if present."""
-    if "class" in df.columns:
-        return df["class"].map(CLASS_TO_RISK).fillna("Moderate")
-    # Heuristic from numeric features
-    def heuristic(row):
-        frp, rd, pr = row.get("frp", 0), row.get("robust_deviation", 0), row.get("persistence_rate", 0.5)
-        if frp >= 150 and rd >= 8:
-            return "Critical"
-        if frp >= 60 and rd >= 4:
-            return "High"
-        if pr >= 0.75:
-            return "Low"
-        return "Moderate"
-    return df.apply(heuristic, axis=1)
-
-def train_model(X: np.ndarray, y: np.ndarray, feature_names: list):
-    le = LabelEncoder()
-    le.fit(RISK_ORDER)
-    y_enc = le.transform(y)
-
-    model = XGBClassifier(
-        n_estimators=80,
-        max_depth=3,
-        learning_rate=0.3,
-        subsample=0.85,
-        colsample_bytree=0.85,
-        objective="multi:softprob",
-        num_class=4,
-        eval_metric="mlogloss",
-        random_state=42,
-        verbosity=0,
-    )
-
-    # Cross-validation (StratifiedKFold with as many folds as smallest class count)
-    min_class_count = min(np.bincount(y_enc))
-    n_splits = max(2, min(5, min_class_count))
-    cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
-    cv_scores = cross_val_score(model, X, y_enc, cv=cv, scoring="accuracy")
-
-    # Final fit on full dataset
-    model.fit(X, y_enc)
-
-    return model, le, cv_scores
-
-def print_results(model, le, df, X, y, feature_names, cv_scores):
-    y_pred_enc = model.predict(X)
-    y_pred = le.inverse_transform(y_pred_enc)
-    y_enc  = le.transform(y)
-    probs  = model.predict_proba(X)
-
-    print(DIVIDER)
-    print("  THERMALGUARD — XGBOOST SMART ANALYSER REPORT")
-    print(DIVIDER)
-    print(f"  Records analysed  : {len(df)}")
-    print(f"  Features used     : {len(feature_names)}")
-    print(f"  XGBoost estimators: {model.n_estimators}")
-    print(f"  Cross-val accuracy : {cv_scores.mean():.1%} ± {cv_scores.std():.1%} ({len(cv_scores)}-fold CV)")
-    print()
-
-    # ── Feature Importance ────────────────────────────────────────
-    print(DIVIDER)
-    print("  FEATURE IMPORTANCE (by gain)")
-    print(DIVIDER)
-    importances = model.feature_importances_
-    fi = sorted(zip(feature_names, importances), key=lambda x: -x[1])
-    for name, imp in fi:
-        bar = "█" * int(imp * 60)
-        print(f"  {name:<28} {imp:.4f}  {bar}")
-    print()
-
-    # ── Classification Report ─────────────────────────────────────
-    print(DIVIDER)
-    print("  CLASSIFICATION REPORT")
-    print(DIVIDER)
-    labels_present = [l for l in RISK_ORDER if l in y]
-    print(classification_report(y, y_pred, labels=labels_present, zero_division=0))
-
-    # ── Confusion Matrix ──────────────────────────────────────────
-    print(DIVIDER)
-    print("  CONFUSION MATRIX  (rows=actual, cols=predicted)")
-    print(DIVIDER)
-    cm = confusion_matrix(y, y_pred, labels=RISK_ORDER)
-    header = "           " + "  ".join(f"{l:>9}" for l in RISK_ORDER)
-    print(header)
-    for i, row_label in enumerate(RISK_ORDER):
-        row_str = "  ".join(f"{v:>9}" for v in cm[i])
-        print(f"  {row_label:<9}  {row_str}")
-    print()
-
-    # ── Per-hotspot Predictions ───────────────────────────────────
-    print(DIVIDER)
-    print("  PER-HOTSPOT PREDICTIONS  (confidence = model probability)")
-    print(DIVIDER)
-    id_col   = "id"       if "id"       in df.columns else df.columns[0]
-    dist_col = "district" if "district" in df.columns else None
-
-    for i, (_, row) in enumerate(df.iterrows()):
-        hs_id   = row.get(id_col, f"row-{i+1}")
-        dist    = row.get(dist_col, "—") if dist_col else "—"
-        cls     = row.get("class", "—")
-        actual  = y.iloc[i]
-        pred    = y_pred[i]
-        conf    = probs[i][RISK_ORDER.index(pred)] * 100
-        match   = "✓" if actual == pred else "✗"
-        print(f"  {match} {hs_id:<16} {dist:<12} {cls:<26} → {pred:<10} ({conf:.1f}%)")
-    print()
-
-    # ── District Summary ──────────────────────────────────────────
-    if "district" in df.columns:
-        print(DIVIDER)
-        print("  DISTRICT RISK SUMMARY")
-        print(DIVIDER)
-        df_out = df.copy()
-        df_out["predicted_risk"] = y_pred
-        df_out["risk_score"] = [RISK_ORDER.index(r) for r in y_pred]
-        by_dist = df_out.groupby("district").agg(
-            hotspots=("risk_score", "count"),
-            avg_frp=("frp", "mean"),
-            max_frp=("frp", "max"),
-            avg_risk_score=("risk_score", "mean"),
-            critical_count=("predicted_risk", lambda x: (x == "Critical").sum()),
-            high_count=("predicted_risk", lambda x: (x == "High").sum()),
-        ).sort_values("avg_risk_score", ascending=False)
-
-        print(f"  {'District':<14} {'Spots':>5} {'AvgFRP':>7} {'MaxFRP':>7} {'AvgRisk':>8} {'Critical':>9} {'High':>5}")
-        print(f"  {'-'*14} {'-'*5} {'-'*7} {'-'*7} {'-'*8} {'-'*9} {'-'*5}")
-        for dist, r in by_dist.iterrows():
-            risk_label = RISK_ORDER[min(3, int(round(r.avg_risk_score)))]
-            print(f"  {dist:<14} {int(r.hotspots):>5} {r.avg_frp:>7.1f} {r.max_frp:>7.1f} {risk_label:>8} {int(r.critical_count):>9} {int(r.high_count):>5}")
-        print()
-
-    # ── Disclaimer ────────────────────────────────────────────────
-    print(DIVIDER)
-    print("  ⚠  IMPORTANT — HUMAN APPROVAL REQUIRED")
-    print(DIVIDER)
-    print("  This report is produced by an automated XGBoost model and is")
-    print("  intended to ASSIST district managers, not to replace them.")
-    print("  All predictions must be reviewed and approved by a qualified")
-    print("  analyst before any operational action is taken.")
-    print("  Model uncertainty is inherent — treat confidence scores < 70%")
-    print("  as indicative only and escalate for manual review.")
-    print(DIVIDER)
-
-def main():
-    csv_path = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_CSV
-
-    if not os.path.exists(csv_path):
-        print(f"[ERROR] CSV not found: {csv_path}")
-        sys.exit(1)
-
-    df  = load_data(csv_path)
-    df  = engineer_features(df)
-    y   = build_risk_label(df)
-
-    feature_names = FEATURE_COLS + ["conf_h", "conf_n", "frp_ratio"]
-    available = [f for f in feature_names if f in df.columns]
-    X = df[available].values
-
-    model, le, cv_scores = train_model(X, y, available)
-    print_results(model, le, df, X, y, available, cv_scores)
 
 if __name__ == "__main__":
-    main()
+    try:
+        print(json.dumps(analyse(json.load(sys.stdin)), allow_nan=False))
+    except Exception as error:
+        print(json.dumps({"error": str(error)}))
+        sys.exit(1)

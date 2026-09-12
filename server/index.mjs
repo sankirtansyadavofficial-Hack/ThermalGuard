@@ -5,6 +5,7 @@ import { resolve, extname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createStore } from "./store.mjs";
 import { createProviders } from "./providers.mjs";
+import { createAnalysis, CSV_LIMIT } from "./analysis.mjs";
 import { bboxValue, SOURCES, CLASSES, VERSION, fail } from "./processing.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -20,14 +21,14 @@ function tokenMatches(actual, expected) {
     b = Buffer.from(expected);
   return a.length === b.length && timingSafeEqual(a, b);
 }
-async function body(req) {
+async function body(req, limit = 16384) {
   if (!String(req.headers["content-type"]).includes("application/json"))
     throw fail("Expected application/json.", 415);
   const parts = [];
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > 16384) throw fail("Request is too large.", 413);
+    if (size > limit) throw fail("Request is too large.", 413);
     parts.push(chunk);
   }
   try {
@@ -54,9 +55,11 @@ export async function createApplication({
   mapKey = process.env.FIRMS_MAP_KEY || "",
   fetcher = fetch,
   dev = false,
+  analysisOptions = {},
 } = {}) {
   const store = createStore(dbPath),
     providers = createProviders(store, { mapKey, fetcher });
+  const analysis = createAnalysis(store, providers, analysisOptions);
   const vite = dev
     ? await (
         await import("vite")
@@ -77,6 +80,12 @@ export async function createApplication({
             authRequired: !!token,
             model: VERSION,
             providers: SOURCES,
+            analysis: {
+              engine: "XGBoost",
+              target: "Observed FRP consistency",
+              execution: "server-side Python",
+              endpoint: "/api/analysis/jobs",
+            },
           });
         if (
           token &&
@@ -101,6 +110,17 @@ export async function createApplication({
         if (rates.size > 1000)
           for (const [key, item] of rates)
             if (now - item.start > 60000) rates.delete(key);
+        if (url.pathname === "/api/analysis/jobs" && req.method === "POST")
+          return send(
+            res,
+            202,
+            analysis.start(await body(req, CSV_LIMIT + 200000)),
+          );
+        const jobMatch = /^\/api\/analysis\/jobs\/([a-f0-9-]{36})$/.exec(
+          url.pathname,
+        );
+        if (jobMatch && req.method === "GET")
+          return send(res, 200, analysis.get(jobMatch[1]));
         if (url.pathname === "/api/events" && req.method === "GET") {
           const source = url.searchParams.get("source") || "NOAA20",
             days = Number(url.searchParams.get("days") || 1),
@@ -236,6 +256,7 @@ export async function createApplication({
     async close() {
       await new Promise((r) => server.close(r));
       await vite?.close();
+      await analysis.close();
       store.db.close();
     },
   };

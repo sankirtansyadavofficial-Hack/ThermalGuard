@@ -125,6 +125,13 @@ const stages = [
 
 const routes = [
   {
+    method: "POST / GET",
+    path: "/api/analysis/jobs",
+    title: "Run genuine XGBoost analysis",
+    text: "POST creates a bounded background job: fetch NASA training observations, fit a real XGBoost FRP regression, evaluate a separate day and score the selected extent or uploaded FIRMS CSV. GET /api/analysis/jobs/:id returns actual stage, elapsed time and the evidence report. No fabricated progress, weather, causes or accuracy.",
+    code: 'POST body: { source: "NOAA20", days: 1, bbox: [68,6,98,37], csv?: "FIRMS CSV" }\nResponse: { id, status, stage }\nGET /:id response: { status, elapsedMs, result?, error? }',
+  },
+  {
     method: "GET",
     path: "/api/health",
     title: "Check the connection",
@@ -588,7 +595,7 @@ export default function LandingGuide() {
             <p>
               {mode === "hosted"
                 ? "Browser-side filters and review rules"
-                : "Validate · deduplicate · group · rank"}
+                : "Validate · group · Python XGBoost jobs"}
             </p>
           </article>
           <ArrowRight className="path-arrow" />
@@ -599,7 +606,7 @@ export default function LandingGuide() {
             <p>
               {mode === "hosted"
                 ? "Local reviews and watch areas; session-only demo login"
-                : "Map and review UI; snapshots, events, reviews and areas"}
+                : "Map, model evidence and reviews; SQLite reports + model artifacts"}
             </p>
           </article>
         </div>

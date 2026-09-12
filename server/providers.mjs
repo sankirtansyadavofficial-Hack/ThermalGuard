@@ -30,6 +30,7 @@ export function createProviders(store, { fetcher = fetch, mapKey = "" } = {}) {
   }
   return {
     async events({ source, days, bbox, mode }) {
+      const started = performance.now();
       const src = SOURCES[source];
       if (mode === "replay") {
         const events = cluster(
@@ -62,8 +63,8 @@ export function createProviders(store, { fetcher = fetch, mapKey = "" } = {}) {
         ? `https://firms.modaps.eosdis.nasa.gov/api/area/csv/${encodeURIComponent(mapKey)}/${src.api}/${bbox.join(",")}/${days}`
         : publicUrl;
       const key = useKey
-        ? `firms:${source}:${days}:${bbox.join(",")}`
-        : `firms:${source}:${days}:South_Asia`;
+        ? `firms-v2:${source}:${days}:${bbox.join(",")}`
+        : `firms-v2:${source}:${days}:South_Asia`;
       const cached = store.snapshot(key);
       let result,
         stale = false,
@@ -135,6 +136,7 @@ export function createProviders(store, { fetcher = fetch, mapKey = "" } = {}) {
             : "South Asia download, filtered to requested bounding box",
           bbox,
           days,
+          serverMs: Math.round(performance.now() - started),
         },
       };
     },
