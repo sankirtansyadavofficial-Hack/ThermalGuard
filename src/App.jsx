@@ -4,7 +4,7 @@ import { DISTRICTS, restoreManager } from "./workspace/districts";
 import "./workspace/earth.css";
 const Workspace = lazy(() => import("./workspace/Workspace"));
 const inWorkspace = () =>
-  ["overview", "queue", "analytics", "areas", "sources"].includes(
+  ["overview", "queue", "analytics", "areas", "sources", "analyser"].includes(
     location.hash.slice(1),
   );
 export default function App() {

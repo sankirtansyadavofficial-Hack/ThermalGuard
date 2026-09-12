@@ -7,6 +7,7 @@ import {
   BarChart3,
   Bell,
   Bookmark,
+  BrainCircuit,
   Check,
   ChevronRight,
   CircleHelp,
@@ -42,6 +43,7 @@ import MapView from "./MapView";
 import EvidenceDrawer from "./EvidenceDrawer";
 import { Timeline, PriorityBars } from "./Charts";
 import { DISTRICTS } from "./districts";
+import SmartAnalyser from "./SmartAnalyser";
 
 const NAV = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
@@ -49,6 +51,7 @@ const NAV = [
   { id: "analytics", label: "Analytics", icon: BarChart3 },
   { id: "areas", label: "Watch areas", icon: Bookmark },
   { id: "sources", label: "Data & methodology", icon: Database },
+  { id: "analyser", label: "Smart Analyser", icon: BrainCircuit },
 ];
 const TITLES = {
   overview: [
@@ -70,6 +73,10 @@ const TITLES = {
   sources: [
     "Know the evidence behind it.",
     "Source health, processing methods and the boundaries of this prototype.",
+  ],
+  analyser: [
+    "Intelligence that assists, not decides.",
+    "XGBoost-powered risk analysis across all thermal hotspots. Every recommendation requires human review and approval.",
   ],
 };
 
@@ -814,6 +821,9 @@ export default function Workspace({ initialArea, manager, onHome, onLogout }) {
               setAutoRefresh={setAutoRefresh}
               openConnection={() => setConnection(true)}
             />
+          )}
+          {tab === "analyser" && (
+            <SmartAnalyser feed={feed} manager={manager} />
           )}
           <footer className="workspace-footer">
             <span>

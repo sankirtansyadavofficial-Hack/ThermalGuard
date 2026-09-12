@@ -2442,3 +2442,90 @@ td small {
     transition: none !important;
   }
 }
+
+/* ── Smart Analyser Page ─────────────────────────────────────────────────── */
+.analyser-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-bottom: 48px;
+  min-height: 100%;
+}
+.analyser-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.analyser-approval-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: rgba(255,196,0,0.07);
+  border: 1px solid rgba(255,196,0,0.28);
+  font-size: 12px;
+  color: rgba(255,196,0,0.88);
+  line-height: 1.55;
+}
+.analyser-approval-banner strong { color: #ffc400; }
+.analyser-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.analyser-stat-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  cursor: pointer;
+  transition: border-color 0.18s, background 0.18s;
+}
+.analyser-stat-card:hover { background: rgba(255,255,255,0.05); }
+.analyser-stat-card.active { background: rgba(85,212,245,0.05); }
+.analyser-grid {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 16px;
+  align-items: start;
+}
+.analyser-main { display: flex; flex-direction: column; }
+.analyser-sidebar { display: flex; flex-direction: column; gap: 14px; }
+.analyser-panel {
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+}
+.analyser-upload-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 24px 16px;
+  border-radius: 10px;
+  border: 1.5px dashed rgba(255,255,255,0.14);
+  cursor: pointer;
+  transition: border-color 0.18s, background 0.18s;
+}
+.analyser-upload-zone:hover,
+.analyser-upload-zone.dragging {
+  border-color: rgba(85,212,245,0.5);
+  background: rgba(85,212,245,0.04);
+}
+@media (max-width: 1100px) {
+  .analyser-grid { grid-template-columns: 1fr; }
+  .analyser-sidebar { order: -1; }
+}
+@media (max-width: 700px) {
+  .analyser-stats { grid-template-columns: repeat(2,1fr); }
+}
