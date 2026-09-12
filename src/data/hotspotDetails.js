@@ -350,10 +350,130 @@ const CHENNAI = [
   },
 ]
 
+// ── AHMEDABAD DISTRICT (Gujarat) ──────────────────────────────────────────────
+// Urban-industrial interface: GIDC Chemical Clusters, Engineering, Textile Units
+const AHMEDABAD = [
+  {
+    id: 'HS-AHM-001',
+    district: 'Ahmedabad', state: 'Gujarat',
+    class: 'Persistent Industrial Heat', classColor: '#3a9fff',
+    lat: 22.9560, lng: 72.6340,
+    satellite: {
+      sensor: 'VIIRS', spacecraft: 'NOAA-20', acq_date: '2026-09-12', acq_time: '02:18',
+      bright_ti4: 352.4, bright_ti5: 298.2, delta_t: 54.2,
+      scan: 0.39, track: 0.36, confidence: 'h', frp: 68.4, daynight: 'N', version: '2.0NRT',
+    },
+    baseline: { median_frp: 62.8, mad_frp: 8.5, robust_deviation: 0.66, days_seen_30d: 29, days_seen_365d: 346, persistence_rate: 0.95 },
+    frpHistory: genHistory(63, 8, 68.4),
+    classification: { 'Acute Industrial Fire': 0.03, 'Routine Gas Flare': 0.07, 'Persistent Industrial Heat': 0.83, 'Wildfire / Natural Fire': 0.01, 'Agricultural Burning': 0.02, 'Uncertain / Other': 0.04 },
+    landCover: { built_up: 78, tree_cover: 3, shrubland: 2, grassland: 2, cropland: 5, bare: 8, water: 2, wetland: 0 },
+    weather: { wind_speed_ms: 3.1, wind_direction_deg: 240, temperature_c: 30.8, humidity_pct: 64, precipitation_mm: 0 },
+    facility: { name: 'Vatva GIDC Chemical Zone', type: 'Chemical Manufacturing', distance_m: 160, overlap: true },
+    cluster: { detection_count: 16, overpass_count: 10, spatial_spread_km2: 0.14, centroid_drift_rate: 0, growth_direction: null },
+  },
+  {
+    id: 'HS-AHM-002',
+    district: 'Ahmedabad', state: 'Gujarat',
+    class: 'Acute Industrial Fire', classColor: '#ff4444',
+    lat: 23.0680, lng: 72.6620,
+    satellite: {
+      sensor: 'VIIRS', spacecraft: 'Suomi-NPP', acq_date: '2026-09-12', acq_time: '01:05',
+      bright_ti4: 364.8, bright_ti5: 302.4, delta_t: 62.4,
+      scan: 0.40, track: 0.37, confidence: 'h', frp: 94.2, daynight: 'N', version: '2.0NRT',
+    },
+    baseline: { median_frp: 34.2, mad_frp: 7.1, robust_deviation: 8.45, days_seen_30d: 3, days_seen_365d: 42, persistence_rate: 0.12 },
+    frpHistory: genHistory(34, 7, 94.2),
+    classification: { 'Acute Industrial Fire': 0.74, 'Routine Gas Flare': 0.11, 'Persistent Industrial Heat': 0.08, 'Wildfire / Natural Fire': 0.02, 'Agricultural Burning': 0.02, 'Uncertain / Other': 0.03 },
+    landCover: { built_up: 70, tree_cover: 4, shrubland: 2, grassland: 2, cropland: 8, bare: 12, water: 2, wetland: 0 },
+    weather: { wind_speed_ms: 4.6, wind_direction_deg: 220, temperature_c: 30.1, humidity_pct: 66, precipitation_mm: 0 },
+    facility: { name: 'Naroda Industrial Estate Boiler Unit', type: 'Dye & Chemical Processing', distance_m: 80, overlap: true },
+    cluster: { detection_count: 12, overpass_count: 7, spatial_spread_km2: 0.22, centroid_drift_rate: 0, growth_direction: null },
+  },
+  {
+    id: 'HS-AHM-003',
+    district: 'Ahmedabad', state: 'Gujarat',
+    class: 'Uncertain / Other', classColor: '#888888',
+    lat: 22.9820, lng: 72.5640,
+    satellite: {
+      sensor: 'VIIRS', spacecraft: 'NOAA-21', acq_date: '2026-09-12', acq_time: '02:30',
+      bright_ti4: 326.1, bright_ti5: 298.0, delta_t: 28.1,
+      scan: 0.39, track: 0.36, confidence: 'm', frp: 38.6, daynight: 'N', version: '2.0NRT',
+    },
+    baseline: { median_frp: 28.4, mad_frp: 6.8, robust_deviation: 1.5, days_seen_30d: 14, days_seen_365d: 160, persistence_rate: 0.44 },
+    frpHistory: genHistory(28, 7, 38.6),
+    classification: { 'Acute Industrial Fire': 0.12, 'Routine Gas Flare': 0.08, 'Persistent Industrial Heat': 0.28, 'Wildfire / Natural Fire': 0.04, 'Agricultural Burning': 0.04, 'Uncertain / Other': 0.44 },
+    landCover: { built_up: 52, tree_cover: 6, shrubland: 8, grassland: 8, cropland: 10, bare: 14, water: 2, wetland: 0 },
+    weather: { wind_speed_ms: 3.8, wind_direction_deg: 230, temperature_c: 29.5, humidity_pct: 70, precipitation_mm: 0 },
+    facility: { name: 'Pirana Municipal Processing & Landfill', type: 'Urban Solid Waste Facility', distance_m: 350, overlap: false },
+    cluster: { detection_count: 8, overpass_count: 5, spatial_spread_km2: 0.48, centroid_drift_rate: 15, growth_direction: 210 },
+  },
+]
+
+// ── DHANBAD DISTRICT (Jharkhand) ──────────────────────────────────────────────
+// Jharia coalfields: Deep subsurface coal fires, opencast colliery combustion
+const DHANBAD = [
+  {
+    id: 'HS-DHA-001',
+    district: 'Dhanbad', state: 'Jharkhand',
+    class: 'Persistent Industrial Heat', classColor: '#ff2a2a',
+    lat: 23.7420, lng: 86.4160,
+    satellite: {
+      sensor: 'VIIRS', spacecraft: 'NOAA-21', acq_date: '2026-09-12', acq_time: '03:05',
+      bright_ti4: 394.2, bright_ti5: 305.8, delta_t: 88.4,
+      scan: 0.39, track: 0.36, confidence: 'h', frp: 215.6, daynight: 'N', version: '2.0NRT',
+    },
+    baseline: { median_frp: 185.4, mad_frp: 22.8, robust_deviation: 1.32, days_seen_30d: 30, days_seen_365d: 362, persistence_rate: 0.99 },
+    frpHistory: genHistory(185, 22, 215.6),
+    classification: { 'Acute Industrial Fire': 0.12, 'Routine Gas Flare': 0.02, 'Persistent Industrial Heat': 0.82, 'Wildfire / Natural Fire': 0.01, 'Agricultural Burning': 0.01, 'Uncertain / Other': 0.02 },
+    landCover: { built_up: 32, tree_cover: 6, shrubland: 8, grassland: 4, cropland: 8, bare: 40, water: 2, wetland: 0 },
+    weather: { wind_speed_ms: 2.8, wind_direction_deg: 170, temperature_c: 28.6, humidity_pct: 74, precipitation_mm: 0 },
+    facility: { name: 'Jharia Coalfield Fire Zone IX', type: 'Subsurface Coal Seam Fire', distance_m: 0, overlap: true },
+    cluster: { detection_count: 46, overpass_count: 28, spatial_spread_km2: 2.85, centroid_drift_rate: 8, growth_direction: 190 },
+  },
+  {
+    id: 'HS-DHA-002',
+    district: 'Dhanbad', state: 'Jharkhand',
+    class: 'Acute Industrial Fire', classColor: '#ff4444',
+    lat: 23.7680, lng: 86.4380,
+    satellite: {
+      sensor: 'VIIRS', spacecraft: 'NOAA-20', acq_date: '2026-09-12', acq_time: '01:50',
+      bright_ti4: 378.6, bright_ti5: 306.7, delta_t: 71.9,
+      scan: 0.39, track: 0.36, confidence: 'h', frp: 148.2, daynight: 'N', version: '2.0NRT',
+    },
+    baseline: { median_frp: 92.4, mad_frp: 14.6, robust_deviation: 3.82, days_seen_30d: 26, days_seen_365d: 310, persistence_rate: 0.85 },
+    frpHistory: genHistory(92, 15, 148.2),
+    classification: { 'Acute Industrial Fire': 0.65, 'Routine Gas Flare': 0.04, 'Persistent Industrial Heat': 0.25, 'Wildfire / Natural Fire': 0.02, 'Agricultural Burning': 0.01, 'Uncertain / Other': 0.03 },
+    landCover: { built_up: 28, tree_cover: 4, shrubland: 6, grassland: 4, cropland: 6, bare: 50, water: 2, wetland: 0 },
+    weather: { wind_speed_ms: 3.2, wind_direction_deg: 165, temperature_c: 28.9, humidity_pct: 72, precipitation_mm: 0 },
+    facility: { name: 'BCCL Kusunda Opencast Colliery (Pit 4)', type: 'Coal Mining & Processing', distance_m: 40, overlap: true },
+    cluster: { detection_count: 24, overpass_count: 14, spatial_spread_km2: 1.15, centroid_drift_rate: 0, growth_direction: null },
+  },
+  {
+    id: 'HS-DHA-003',
+    district: 'Dhanbad', state: 'Jharkhand',
+    class: 'Persistent Industrial Heat', classColor: '#3a9fff',
+    lat: 23.7210, lng: 86.4520,
+    satellite: {
+      sensor: 'VIIRS', spacecraft: 'Suomi-NPP', acq_date: '2026-09-12', acq_time: '02:12',
+      bright_ti4: 346.8, bright_ti5: 298.2, delta_t: 48.6,
+      scan: 0.40, track: 0.37, confidence: 'h', frp: 82.5, daynight: 'N', version: '2.0NRT',
+    },
+    baseline: { median_frp: 78.2, mad_frp: 9.4, robust_deviation: 0.46, days_seen_30d: 28, days_seen_365d: 330, persistence_rate: 0.90 },
+    frpHistory: genHistory(78, 9, 82.5),
+    classification: { 'Acute Industrial Fire': 0.06, 'Routine Gas Flare': 0.03, 'Persistent Industrial Heat': 0.84, 'Wildfire / Natural Fire': 0.02, 'Agricultural Burning': 0.01, 'Uncertain / Other': 0.04 },
+    landCover: { built_up: 22, tree_cover: 8, shrubland: 10, grassland: 6, cropland: 12, bare: 38, water: 3, wetland: 1 },
+    weather: { wind_speed_ms: 2.5, wind_direction_deg: 180, temperature_c: 27.8, humidity_pct: 78, precipitation_mm: 0 },
+    facility: { name: 'Lodna Colliery Smoldering Overburden Dump', type: 'Coal Waste Dump Fire', distance_m: 110, overlap: true },
+    cluster: { detection_count: 18, overpass_count: 11, spatial_spread_km2: 0.76, centroid_drift_rate: 12, growth_direction: 180 },
+  },
+]
+
 // ── Master data map ───────────────────────────────────────────────────────────
 export const ALL_HOTSPOTS_BY_DISTRICT = {
   'Jamnagar':  JAMNAGAR,
+  'Ahmedabad': AHMEDABAD,
   'Ludhiana':  LUDHIANA,
+  'Dhanbad':   DHANBAD,
   'Mumbai':    MUMBAI,
   'Surat':     SURAT,
   'Chennai':   CHENNAI,

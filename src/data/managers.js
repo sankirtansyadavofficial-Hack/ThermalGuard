@@ -15,6 +15,7 @@ export const MANAGERS = [
   { id: 'M010', state: 'Maharashtra', district: 'Pune', email: 'manager.pune@thermalguard.in', password: 'TG@pun2026', name: 'Amit Kulkarni', role: 'District Thermal Officer', phone: '+91 98765 43219', joined: '2024-08-01' },
   { id: 'M011', state: 'Rajasthan', district: 'Jaipur', email: 'manager.jaipur@thermalguard.in', password: 'TG@jai2026', name: 'Deepak Sharma', role: 'District Thermal Officer', phone: '+91 98765 43220', joined: '2024-08-15' },
   { id: 'M012', state: 'Tamil Nadu', district: 'Chennai', email: 'manager.chennai@thermalguard.in', password: 'TG@che2026', name: 'Lakshmi Venkat', role: 'District Thermal Officer', phone: '+91 98765 43221', joined: '2024-09-01' },
+  { id: 'M013', state: 'Jharkhand', district: 'Dhanbad', email: 'manager.dhanbad@thermalguard.in', password: 'TG@dha2026', name: 'Alok Sengupta', role: 'District Thermal Officer', phone: '+91 98765 43222', joined: '2024-09-05' },
 ]
 
 export const STATES_DISTRICTS = {
@@ -23,6 +24,7 @@ export const STATES_DISTRICTS = {
   'Maharashtra': ['Mumbai', 'Pune'],
   'Rajasthan': ['Jaipur'],
   'Tamil Nadu': ['Chennai'],
+  'Jharkhand': ['Dhanbad'],
 }
 
 export function validateLogin(state, district, email, password) {
