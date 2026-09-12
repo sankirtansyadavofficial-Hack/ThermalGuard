@@ -246,7 +246,6 @@
 .earth-coordinate {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: 14px;
   margin: 0 12px;
   padding-top: 16px;
@@ -262,36 +261,9 @@
   font-weight: 500;
 }
 .earth-coordinate code {
+  margin-left: auto;
   font-size: 9px;
   color: #c5f277;
-}
-.earth-coordinate-stats {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.coord-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-family: "IBM Plex Mono", monospace;
-  background: rgba(255, 149, 89, 0.12);
-  color: #ff9559;
-}
-.coord-badge.frp {
-  background: rgba(112, 216, 255, 0.12);
-  color: #70d8ff;
-}
-.coord-badge.risk {
-  font-weight: 600;
-  font-size: 9px;
-  text-transform: uppercase;
-  border: 1px solid currentColor;
-  background: transparent;
 }
 .pilot-section {
   max-width: 1440px;
@@ -328,21 +300,20 @@
 }
 .district-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
 }
 .district-card {
   background: #101a1d;
   border: 1px solid #2d393b;
   border-radius: 8px;
   text-align: left;
-  padding: 20px;
+  padding: 21px;
   position: relative;
   color: #e9f0ed;
   transition:
     border-color 0.2s,
-    transform 0.2s,
-    background 0.2s;
+    transform 0.2s;
 }
 .district-card:hover {
   transform: translateY(-3px);
@@ -352,7 +323,7 @@
   border-color: #b1d673;
   background: #18231d;
 }
-.district-card > div:first-child {
+.district-card > div {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -361,159 +332,58 @@
     9px "IBM Plex Mono",
     monospace;
 }
-.district-card.active > div:first-child {
+.district-card.active > div {
   color: #c5f277;
 }
 .district-card h3 {
-  font-size: 21px;
-  margin: 18px 0 6px;
+  font-size: 22px;
+  margin: 24px 0 8px;
   letter-spacing: -0.5px;
 }
 .district-card p {
   margin: 0;
   color: #a4b5ae;
   font-size: 11px;
-  line-height: 1.4;
-}
-.district-card-telemetry {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 14px;
-  padding-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-.telemetry-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 7px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-family: "IBM Plex Mono", monospace;
-  background: rgba(255, 255, 255, 0.05);
-  color: #9db2a9;
-}
-.telemetry-badge.hotspots {
-  color: #ff9559;
-  background: rgba(255, 149, 89, 0.12);
-}
-.telemetry-badge.frp {
-  color: #70d8ff;
-  background: rgba(112, 216, 255, 0.12);
-}
-.telemetry-badge.risk {
-  font-weight: 600;
-  font-size: 9px;
-  text-transform: uppercase;
-  border: 1px solid transparent;
 }
 .district-arrow {
   position: absolute;
-  right: 16px;
-  top: 18px;
-  color: #5d756c;
-  transition: color 0.2s, transform 0.2s;
-}
-.district-card:hover .district-arrow {
-  color: #c5f277;
-  transform: translate(2px, -2px);
+  right: 18px;
+  bottom: 20px;
+  color: #758b83;
 }
 .district-context {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 18px;
   margin-top: 18px;
-  padding: 20px 24px;
+  padding: 18px 21px;
   background: #0f171a;
-  border-radius: 8px;
+  border-radius: 7px;
   color: #a0b3ac;
-  border: 1px solid #233430;
 }
 .district-context > svg {
   flex-shrink: 0;
   color: #ff9559;
-  margin-top: 3px;
 }
-.district-context-body {
-  flex: 1;
-}
-.district-context-desc {
+.district-context p {
   font-size: 12px;
-  line-height: 1.6;
-  margin: 0 0 14px 0;
-  max-width: 920px;
+  line-height: 1.7;
+  margin: 0;
+  max-width: 850px;
 }
-.district-context-desc strong {
+.district-context p strong {
   color: #dfebe4;
-}
-.district-telemetry-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  gap: 10px 14px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-.telemetry-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.telemetry-label {
-  font-size: 9px;
-  font-family: "IBM Plex Mono", monospace;
-  text-transform: uppercase;
-  color: #738b84;
-  letter-spacing: 0.5px;
-}
-.telemetry-value {
-  font-size: 12px;
-  font-weight: 500;
-  color: #d1e2db;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.telemetry-value.highlight {
-  color: #ff9559;
-  font-weight: 600;
-}
-.telemetry-value.highlight-frp {
-  color: #70d8ff;
-  font-weight: 600;
-}
-.telemetry-value.anomaly {
-  color: #ff5f5f;
-  font-family: "IBM Plex Mono", monospace;
-  font-weight: 600;
-}
-.telemetry-value.confidence {
-  color: #c5f277;
-  font-family: "IBM Plex Mono", monospace;
-}
-.telemetry-icon {
-  flex-shrink: 0;
 }
 .district-context button {
   margin-left: auto;
-  align-self: center;
   flex-shrink: 0;
   display: flex;
   gap: 8px;
   align-items: center;
   border: 0;
-  background: rgba(197, 242, 119, 0.1);
-  border: 1px solid rgba(197, 242, 119, 0.3);
-  padding: 8px 14px;
-  border-radius: 6px;
+  background: transparent;
   color: #c5f277;
   font-size: 12px;
-  cursor: pointer;
-  transition: background 0.2s, border-color 0.2s;
-}
-.district-context button:hover {
-  background: rgba(197, 242, 119, 0.2);
-  border-color: #c5f277;
 }
 .approach-section {
   max-width: 1440px;
