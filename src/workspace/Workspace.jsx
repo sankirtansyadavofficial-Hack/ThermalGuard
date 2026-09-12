@@ -823,7 +823,15 @@ export default function Workspace({ initialArea, manager, onHome, onLogout }) {
             />
           )}
           {tab === "analyser" && (
-            <SmartAnalyser feed={feed} manager={manager} />
+            <SmartAnalyser
+              feed={feed}
+              loading={loading}
+              area={area}
+              setArea={setArea}
+              areas={[...PRESETS, ...DISTRICTS, ...areas]}
+              manager={manager}
+              onSavedReview={saved}
+            />
           )}
           <footer className="workspace-footer">
             <span>
