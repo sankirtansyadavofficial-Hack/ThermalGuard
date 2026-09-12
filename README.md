@@ -1,6 +1,6 @@
 # ThermalGuard
 
-CompileX's SIH26162 satellite intelligence prototype. React/Vite, a Node API and SQLite, using actual NASA FIRMS thermal observations.
+CompileX's satellite intelligence prototype. React/Vite, a Node API and SQLite, using actual NASA FIRMS thermal observations.
 
 ## Start
 
@@ -89,7 +89,7 @@ Set `BROWSER_EXECUTABLE` for another Chrome/Chromium path. Browser checks create
 
 Grid/day boundaries can split one physical incident. Repeated detections are not independent incident confirmations. India extent is a rectangle and includes neighboring territory; the public download covers South Asia even if a custom extent lies elsewhere.
 
-A trained six-class XGBoost model, historical facility baselines, facility overlap, Sentinel/WorldCover/ERA5 fusion, measured accuracy, verified user roles and emergency dispatch remain future work. They need labeled data, additional pipelines and independent validation. Satellite overpasses and clouds limit visibility. No claim of continuous surveillance or guaranteed SIH selection is made.
+A trained six-class XGBoost model, historical facility baselines, facility overlap, Sentinel/WorldCover/ERA5 fusion, measured accuracy, verified user roles and emergency dispatch remain future work. They need labeled data, additional pipelines and independent validation. Satellite overpasses and clouds limit visibility. No claim of continuous surveillance or official warning service is made.
 
 ## Source of truth
 

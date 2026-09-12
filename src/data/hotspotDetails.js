@@ -1,5 +1,5 @@
 // ThermalGuard — Comprehensive Simulated Satellite Data
-// Based on ThermalGuard SIH26162 Winning Dossier specifications
+// Based on ThermalGuard Satellite Intelligence specifications
 // Data sources: NASA FIRMS VIIRS, ESA WorldCover, ERA5, OpenStreetMap
 
 // ── Helper: generate 12-month FRP history ─────────────────────────────────────

@@ -261,7 +261,7 @@ export default function Footer() {
 
           {/* Copyright */}
           <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', margin: 0 }}>
-            © {new Date().getFullYear()} CompileX. All rights reserved. | SIH 2026
+            © {new Date().getFullYear()} CompileX. All rights reserved.
           </p>
         </div>
       </div>

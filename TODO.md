@@ -33,7 +33,7 @@
 - Optional OSM context endpoint timed out during live verification (both main and separately checked alternate provider). Failure state works. No context data or facility claims were fabricated.
 - Optional FIRMS MAP_KEY branch covered by mocked API tests; no real private key was supplied. Public NASA path verified end to end.
 - Trained classifier, independent accuracy validation, long-term facility baselines, full satellite/land-cover fusion, verified user roles and emergency operations remain explicitly out of this prototype scope.
-- No SIH win claim. Public deployment was completed in phase 5 and is updated in phase 6.
+- Public deployment was completed in phase 5 and is updated in phase 6.
 
 ## GitHub Pages deployment (10 September 2026)
 

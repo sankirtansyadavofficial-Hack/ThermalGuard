@@ -58,7 +58,7 @@ export default function Landing({ onEnter, manager }) {
         <section className="earth-hero">
           <div className="earth-intro">
             <div className="eyebrow">
-              <span /> COMPILEX / SIH 2026
+              <span /> COMPILEX / SATELLITE INTELLIGENCE
             </div>
             <h1>
               A global view.

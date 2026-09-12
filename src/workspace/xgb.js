@@ -2,7 +2,7 @@
  * xgb.js — Calibrated XGBoost Gradient-Boosted Decision Tree Engine (JavaScript)
  *
  * Implements Gradient Boosting with decision trees (CART) calibrated against
- * satellite thermal baselines (NASA FIRMS VIIRS & ThermalGuard SIH26162 specifications).
+ * satellite thermal baselines (NASA FIRMS VIIRS & ThermalGuard specifications).
  *
  * Key Baseline Criteria:
  * - High historical persistence (>70%) indicates routine flares or continuous process heat (Low/Moderate).

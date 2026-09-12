@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Deliver CompileX's SIH26162 idea as a working Vite application: inspect NASA thermal detections, prioritize evidence for human review, and preserve analyst decisions. This application scope supersedes the parent workbook project's exclusion of prototype development.
+Deliver CompileX's satellite intelligence platform as a working Vite application: inspect NASA thermal detections, prioritize evidence for human review, and preserve analyst decisions. This application scope supersedes the parent workbook project's exclusion of prototype development.
 
 ## Features and acceptance
 
@@ -20,7 +20,7 @@ Deliver CompileX's SIH26162 idea as a working Vite application: inspect NASA the
 
 Landing education: add accessible hover/focus/tap feature explanations, a selectable five-stage satellite-to-review walkthrough, an illustrative FRP/confidence priority calculator using the existing rules, and a backend explorer distinguishing the hosted replay from the Node/NASA deployment. Describe satellite limitations and link official NASA references. Preserve the Earth, district login and all workspace functions; add no new data sources, authentication or detection claims.
 
-Near-real-time detections are not continuous surveillance or verified incidents. Rule priority is not fire probability. A trained six-class model, calibrated accuracy, ground truth, dispatch and national deployment are outside this iteration. No guarantee of SIH selection. Keys stay server-side.
+Near-real-time detections are not continuous surveillance or verified incidents. Rule priority is not fire probability. A trained six-class model, calibrated accuracy, ground truth, dispatch and national deployment are outside this iteration. Prototype scope only. Keys stay server-side.
 
 ## Interactive Earth and district demonstration
 

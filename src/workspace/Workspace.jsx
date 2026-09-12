@@ -241,7 +241,7 @@ export default function Workspace({ initialArea, manager, onHome, onLogout }) {
         <div className="workspace-label">
           <span className="workspace-icon">C</span>
           <div>
-            CompileX workspace<small>SIH 2026 · Research prototype</small>
+            CompileX workspace<small>ThermalGuard · Research prototype</small>
           </div>
         </div>
         <span className="nav-caption">WORKSPACE</span>
@@ -314,7 +314,7 @@ export default function Workspace({ initialArea, manager, onHome, onLogout }) {
             >
               <Globe2 size={17} />
             </button>
-            <span className="mission-code">SIH26162</span>
+            <span className="mission-code">TG-VIIRS</span>
             <span
               className={`status-dot ${mode === "replay" ? "replay" : error || feed?.meta.stale ? "offline" : ""}`}
             />
