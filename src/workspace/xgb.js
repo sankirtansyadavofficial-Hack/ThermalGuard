@@ -141,22 +141,3 @@ export function featuresFromHotspot(hs) {
     med > 0 ? frp / med : 1,
   ];
 }
-
-export function featuresFromCsvRow(row) {
-  const n = k => parseFloat(row[k] ?? 0) || 0;
-  const s = k => String(row[k] ?? '').trim().toLowerCase();
-  const frp = n('frp'), med = n('median_frp') || frp;
-  return [
-    frp, n('bright_ti4') || 320, n('delta_t') || 20,
-    n('robust_deviation'), n('persistence_rate') || 0.5,
-    n('days_seen_30d') || 15, n('built_up') || 30,
-    n('tree_cover') || 10, n('cropland') || 15,
-    n('wind_speed_ms') || 3, n('humidity_pct') || 65, n('temperature_c') || 28,
-    n('detection_count') || 5, n('spatial_spread_km2') || 0.3,
-    n('centroid_drift_rate') || 0,
-    s('confidence') === 'h' ? 1 : 0,
-    (s('confidence') === 'n' || s('confidence') === 'nominal') ? 1 : 0,
-    n('facility_overlap'),
-    med > 0 ? frp / med : 1,
-  ];
-}
