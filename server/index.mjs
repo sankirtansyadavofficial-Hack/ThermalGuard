@@ -58,7 +58,14 @@ export async function createApplication({
   analysisOptions = {},
 } = {}) {
   const store = createStore(dbPath),
-    providers = createProviders(store, { mapKey, fetcher });
+    providers = createProviders(store, {
+      mapKey,
+      fetcher,
+      allowOfflineFallback:
+        process.env.ALLOW_OFFLINE_CACHE === undefined
+          ? true
+          : process.env.ALLOW_OFFLINE_CACHE === "true",
+    });
   const analysis = createAnalysis(store, providers, analysisOptions);
   const vite = dev
     ? await (

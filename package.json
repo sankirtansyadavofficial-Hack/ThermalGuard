@@ -21,6 +21,8 @@
     "test:earth": "node tests/earth-browser.mjs",
     "test:analysis": "node tests/analysis-browser.mjs",
     "test:model": "node scripts/test-model.mjs",
+    "watch:db": "node scripts/watch-db.mjs",
+    "show:hotspots": "node scripts/show-hotspots.mjs",
     "preview": "npm start"
   },
   "dependencies": {
