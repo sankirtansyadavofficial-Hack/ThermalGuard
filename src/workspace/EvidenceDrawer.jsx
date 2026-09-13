@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   X,
   ArrowUpRight,
@@ -7,9 +7,15 @@ import {
   Check,
   Clock,
   ShieldCheck,
+  ShieldAlert,
+  Phone,
 } from "lucide-react";
 import { api, CLASSES, formatUTC, download, colors } from "./client";
 import { Sparkline } from "./Charts";
+import {
+  findNearbyEmergencyServices,
+  formatEmergencyDispatchText,
+} from "./emergencyServices";
 
 export default function EvidenceDrawer({ event, meta, onClose, onSaved }) {
   const ref = useRef(null);
@@ -28,6 +34,20 @@ export default function EvidenceDrawer({ event, meta, onClose, onSaved }) {
   const [saving, setSaving] = useState(false),
     [message, setMessage] = useState(""),
     [error, setError] = useState("");
+
+  const emergencyStations = useMemo(
+    () => findNearbyEmergencyServices([event], 30),
+    [event],
+  );
+  const [copiedId, setCopiedId] = useState(null);
+
+  function copyDossier(station) {
+    const text = formatEmergencyDispatchText(station, event);
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedId(station.id);
+      setTimeout(() => setCopiedId(null), 2500);
+    });
+  }
   useEffect(() => {
     const previous = document.activeElement;
     ref.current?.focus();
@@ -270,6 +290,56 @@ export default function EvidenceDrawer({ event, meta, onClose, onSaved }) {
               </p>
             )}
           </section>
+          {emergencyStations.length > 0 && (
+            <section className="drawer-section emergency-section">
+              <div className="section-title">
+                <h3>
+                  <ShieldAlert size={17} color="#22c55e" /> Nearby Emergency Responders
+                </h3>
+                <span className="emergency-count-badge">
+                  {emergencyStations.length} within reach
+                </span>
+              </div>
+              <p className="small muted">
+                Verified emergency responders and authorities near this thermal anomaly. Tap to initiate emergency contact or copy dispatch coordinates.
+              </p>
+              <div className="emergency-card-list">
+                {emergencyStations.slice(0, 3).map((st) => (
+                  <div className="drawer-emergency-card" key={st.id}>
+                    <div className="dec-top">
+                      <span className="dec-icon">{st.icon}</span>
+                      <div className="dec-info">
+                        <strong>{st.name}</strong>
+                        <span>{st.typeLabel} · 📍 <strong>{st.distanceKm} km</strong> away</span>
+                      </div>
+                    </div>
+                    <p className="dec-address">{st.address}</p>
+                    <div className="dec-btn-row">
+                      <a
+                        href={`tel:${st.phone.replace(/[^0-9+]/g, "")}`}
+                        className="dec-btn dec-btn-call"
+                      >
+                        <Phone size={13} /> {st.phone}
+                      </a>
+                      <a
+                        href={`tel:${st.altPhone.split("/")[0].trim()}`}
+                        className="dec-btn dec-btn-sos"
+                      >
+                        🚨 Hotline: {st.altPhone}
+                      </a>
+                      <button
+                        type="button"
+                        className="dec-btn dec-btn-copy"
+                        onClick={() => copyDossier(st)}
+                      >
+                        {copiedId === st.id ? "✓ Copied!" : "📋 Copy Alert"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
           <section className="drawer-section">
             <h3>
               <ShieldCheck size={17} /> Analyst decision

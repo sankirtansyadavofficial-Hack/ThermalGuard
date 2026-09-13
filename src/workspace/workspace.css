@@ -939,6 +939,307 @@ small,
     sans-serif;
   box-shadow: 0 4px 15px #0008;
 }
+
+/* Real basemap styling for Google Maps & OpenStreetMap */
+.map-theme-google-streets .leaflet-tile-pane,
+.map-theme-google-hybrid .leaflet-tile-pane,
+.map-theme-streets .leaflet-tile-pane {
+  filter: none;
+}
+
+/* Green Emergency Responder Map Elements */
+.map-green-dot {
+  background: #22c55e;
+  height: 6px;
+  width: 6px;
+  border-radius: 50%;
+  box-shadow: 0 0 6px #22c55e;
+  animation: pulse-green 2s infinite;
+}
+
+.map-top-emergency {
+  border-color: #1e4a2d !important;
+  background: #0d2318ea !important;
+  color: #86efac !important;
+  font-weight: 500;
+  pointer-events: auto;
+}
+
+@keyframes pulse-green {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(34, 197, 94, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+  }
+}
+
+.emergency-green-spot {
+  animation: pulse-green 2.5s infinite;
+  cursor: pointer;
+}
+
+.legend-emergency i {
+  background: #22c55e !important;
+  box-shadow: 0 0 6px #22c55e;
+}
+
+/* Custom Leaflet Emergency Popup */
+.custom-emergency-leaflet-popup .leaflet-popup-content-wrapper {
+  background: #111a1e !important;
+  color: #edf3f1 !important;
+  border: 1px solid #1e4a2d !important;
+  border-radius: 8px !important;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.7), 0 0 15px rgba(34, 197, 94, 0.2) !important;
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+.custom-emergency-leaflet-popup .leaflet-popup-content {
+  margin: 12px 14px !important;
+  line-height: 1.4 !important;
+  font-family: inherit !important;
+}
+
+.custom-emergency-leaflet-popup .leaflet-popup-tip {
+  background: #111a1e !important;
+  border: 1px solid #1e4a2d !important;
+}
+
+.emergency-popup-card .ep-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.emergency-popup-card .ep-icon {
+  font-size: 20px;
+  background: #193123;
+  padding: 6px;
+  border-radius: 6px;
+  border: 1px solid #22c55e44;
+  line-height: 1;
+}
+
+.emergency-popup-card .ep-title-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.emergency-popup-card .ep-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f0fdf4;
+}
+
+.emergency-popup-card .ep-type {
+  font-size: 10px;
+  color: #86efac;
+  font-family: var(--mono);
+}
+
+.emergency-popup-card .ep-meta-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: #14241d;
+  padding: 6px 8px;
+  border-radius: 4px;
+  margin: 8px 0;
+  border: 1px solid #22c55e22;
+  font-size: 10px;
+}
+
+.emergency-popup-card .ep-dist {
+  color: #bbf7d0;
+}
+
+.emergency-popup-card .ep-frp {
+  color: var(--orange);
+}
+
+.emergency-popup-card .ep-address {
+  font-size: 10px;
+  color: #94a3b8;
+  margin: 6px 0 10px;
+}
+
+.emergency-popup-card .ep-contacts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.emergency-popup-card .ep-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 0;
+}
+
+.emergency-popup-card .ep-btn-call {
+  background: #166534;
+  color: #f0fdf4;
+  border: 1px solid #22c55e;
+}
+
+.emergency-popup-card .ep-btn-call:hover {
+  background: #15803d;
+  color: #ffffff;
+}
+
+.emergency-popup-card .ep-btn-sos {
+  background: #7f1d1d;
+  color: #fee2e2;
+  border: 1px solid #ef4444;
+}
+
+.emergency-popup-card .ep-btn-sos:hover {
+  background: #991b1b;
+  color: #ffffff;
+}
+
+.emergency-popup-card .ep-btn-dispatch {
+  width: 100%;
+  background: #1f2d33;
+  color: #cbd5e1;
+  border: 1px solid #3b4c53;
+  margin-top: 4px;
+}
+
+.emergency-popup-card .ep-btn-dispatch:hover {
+  background: #283a42;
+  color: #f8fafc;
+}
+
+/* Drawer Emergency Section */
+.emergency-section {
+  border-left: 3px solid #22c55e;
+  background: #0f1d1822;
+}
+
+.emergency-count-badge {
+  font-size: 9px;
+  padding: 2px 7px;
+  border-radius: 12px;
+  background: #16653444;
+  color: #86efac;
+  border: 1px solid #22c55e55;
+  font-family: var(--mono);
+}
+
+.emergency-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.drawer-emergency-card {
+  background: #121c17;
+  border: 1px solid #1e3d29;
+  border-radius: 6px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.drawer-emergency-card .dec-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.drawer-emergency-card .dec-icon {
+  font-size: 18px;
+}
+
+.drawer-emergency-card .dec-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.drawer-emergency-card .dec-info strong {
+  font-size: 11px;
+  color: #e2e8f0;
+}
+
+.drawer-emergency-card .dec-info span {
+  font-size: 9px;
+  color: #86efac;
+}
+
+.drawer-emergency-card .dec-address {
+  font-size: 9px;
+  color: #718096;
+  margin: 0;
+}
+
+.drawer-emergency-card .dec-btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.drawer-emergency-card .dec-btn {
+  font-size: 10px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+}
+
+.drawer-emergency-card .dec-btn-call {
+  background: #166534;
+  color: #f0fdf4;
+  border-color: #22c55e;
+}
+
+.drawer-emergency-card .dec-btn-call:hover {
+  background: #15803d;
+}
+
+.drawer-emergency-card .dec-btn-sos {
+  background: #7f1d1d;
+  color: #fee2e2;
+  border-color: #ef4444;
+}
+
+.drawer-emergency-card .dec-btn-sos:hover {
+  background: #991b1b;
+}
+
+.drawer-emergency-card .dec-btn-copy {
+  background: #1e293b;
+  color: #cbd5e1;
+  border-color: #475569;
+}
+
+.drawer-emergency-card .dec-btn-copy:hover {
+  background: #334155;
+  color: #ffffff;
+}
+
 .map-warning {
   position: absolute;
   bottom: 4px;
