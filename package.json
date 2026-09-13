@@ -8,6 +8,9 @@
   "type": "module",
   "scripts": {
     "dev": "node --env-file-if-exists=.env server/index.mjs --dev",
+    "postinstall": "node scripts/install-python-deps.mjs",
+    "prebuild": "node scripts/install-python-deps.mjs",
+    "prestart": "node scripts/install-python-deps.mjs",
     "build": "vite build",
     "build:pages": "vite build --base=/Thermal-Guard/ --mode pages",
     "deploy:pages": "npm run build:pages && node scripts/deploy-pages.mjs",
