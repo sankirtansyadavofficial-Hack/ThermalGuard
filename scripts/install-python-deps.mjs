@@ -32,7 +32,7 @@ try {
   // 2. Install inside .venv if pip exists
   if (existsSync(venvPip)) {
     console.log("[ThermalGuard Python Setup] Installing analyser/requirements.txt into .venv...");
-    const pipRes = spawnSync(venvPip, ["install", "-r", reqFile], {
+    const pipRes = spawnSync(venvPip, ["install", "--prefer-binary", "-r", reqFile], {
       cwd: root,
       stdio: "inherit",
     });
@@ -47,7 +47,7 @@ try {
   for (const cmd of [isWin ? "pip" : "pip3", "pip"]) {
     const res = spawnSync(
       cmd,
-      ["install", "--break-system-packages", "-r", reqFile],
+      ["install", "--prefer-binary", "--break-system-packages", "-r", reqFile],
       { cwd: root, stdio: "inherit" },
     );
     if (res.status === 0) {
